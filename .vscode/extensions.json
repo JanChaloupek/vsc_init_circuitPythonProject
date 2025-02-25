@@ -5,8 +5,8 @@
         "MagicStack.MagicPython",
         "VisualStudioExptTeam.vscodeintellicode",
         "emeraldwalk.runonsave",
-        "GitKraken.gitlens",
-        "github.vscode-pull-request-github"
-        "makinteract.micro-bit-python"
+        "eamodio.gitlens",
+        "github.vscode-pull-request-github",
+        "makinteract.micro-bit-python",
     ]
 }
