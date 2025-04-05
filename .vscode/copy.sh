@@ -1,7 +1,7 @@
 #!/bin/bash
 # Davka v Bash. Umi kopirovat soubory do disku se jmenem 'CIRCUITPY'
 # (což je jméno disku CircuitPythonu, který je nainstalován v pico:ed-u)
-# Verze souboru ze dne 2025-02-22
+# Verze souboru ze dne 2025-04-05
 
 # Kontrola počtu předaných parametrů
 if [ "$#" -ne 3 ]; then

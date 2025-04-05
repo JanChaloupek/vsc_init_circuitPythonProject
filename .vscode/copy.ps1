@@ -1,5 +1,5 @@
 # Davka v PowerShell-u. Umi kopirovat soubory do disku se jmenem 'CIRCUITPY' (coz je jmeno disku CircuitPythonu, ktery je nainstalovany v pico:ed-u)
-# Verze souboru ze dne 2025-02-22
+# Verze souboru ze dne 2025-04-05
 param (
     [string]$sourceRoot,            # pracovni adresar projektu v pocitaci                        (prvni parametr)
     [string]$relativePath,          # reletivni cesta souboru, ktery chceme zkopirovat            (druhy parametr)
