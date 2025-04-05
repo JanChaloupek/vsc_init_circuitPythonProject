@@ -8,5 +8,6 @@
         "eamodio.gitlens",
         "github.vscode-pull-request-github",
         "makinteract.micro-bit-python",
+        "jebbs.plantuml",
     ]
 }
