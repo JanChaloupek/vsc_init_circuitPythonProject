@@ -81,7 +81,12 @@ if (Test-Path $sourcePath -PathType Container) {
         New-Item -ItemType Directory -Path $destDir -Force
     }
     Write-Host "Zacinam kopirovat."
-    Copy-Item -Path $sourcePath -Destination $destPath -Force
+    try {
+        Copy-Item -Path $sourcePath -Destination $destPath -Force
+        Write-Host "Vypada to ze vsechno probehlo spravne."
+    } catch {
+        Write-Host "Kopirovani neprobehlo uspesne."
+        Write-Error "Error4: Copy operation failed"
+        exit 4
+    }    
 }
-
-Write-Host "Vypada to ze vsechno probehlo spravne."
