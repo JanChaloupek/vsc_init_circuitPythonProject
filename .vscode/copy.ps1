@@ -1,12 +1,17 @@
 # Davka v PowerShell-u. Umi kopirovat soubory do disku se jmenem 'CIRCUITPY' (coz je jmeno disku CircuitPythonu, ktery je nainstalovany v pico:ed-u)
-# Verze souboru ze dne 2025-04-05
+# Autor: Jan Chaloupek
 param (
     [string]$sourceRoot,            # pracovni adresar projektu v pocitaci                        (prvni parametr)
     [string]$relativePath,          # reletivni cesta souboru, ktery chceme zkopirovat            (druhy parametr)
     [string]$ignoreFilePath         # relativni cesta k souboru se seznamem ignorovanych souboru  (treti parametr)
 )
+# Verze souboru:
+$version = "2025-04-27"
 
-# Funckce hleda ve Windows disk se jmenem 'CIRCUITPY'
+# Přepneme kodovani na UTF-8, aby se spravne zobrazoaly ceske znaky
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Funkce hledá ve Windows disk se jménem 'CIRCUITPY'
 function Find-CircuitPYDrive {
     $drives = Get-WmiObject Win32_LogicalDisk | Where-Object { $_.VolumeName -eq 'CIRCUITPY' }
     $drivesCount = $drives | Measure-Object | Select-Object -ExpandProperty Count
@@ -15,23 +20,19 @@ function Find-CircuitPYDrive {
     } elseif ($drivesCount -gt 1) {
         return ${drives}[0].DeviceID
     } else {
-        Write-Host "Nenasel jsem disk se jmenem 'CIRCUITPY'. Nemam tedy kam soubor nakopirovat -> koncim akci."
-        Write-Host ""
-        Write-Error "Error1: Disc not found"
+        Write-Host "Error: Nenasel jsem disk se jmenem 'CIRCUITPY'. Nemam kam soubor nakopirovat -> koncim akci."
         exit 1
     }
 }
 
-Write-Host "----------------------------------------------------------"
-Write-Host "Spoustim kopirovani souboru do Pico:ed-u. Chci zkopirovat soubor '$relativePath' v adresari '$sourceRoot'."
+Write-Host "-------(verze=$version)-----------------------------------------------"
+Write-Host "Spoustim kopirovani souboru do Picoed-u. Chci zkopirovat soubor '$relativePath' v adresari '$sourceRoot'."
 Write-Host "Zkousim nacist obsah souboru se seznamem ignorovanych polozek '$ignoreFilePath'."
 
 # Load ignore list
 $ignoreFileFullPath = Join-Path -Path $sourceRoot -ChildPath $ignoreFilePath
 if (!(Test-Path $ignoreFileFullPath -PathType Leaf)) {
-    Write-Host "Soubor se seznamem ignrovanych souboru se mi nedari najit. Nemuzu pokracovat v kopirovani -> koncim akci."
-    Write-Host ""
-    Write-Error "Error2: File with ignore list not found"
+    Write-Host "Error: Soubor se seznamem ignorovanych souboru se mi nedari najit. Nemuzu pokracovat v kopirovani -> koncim akci."
     exit 2
 
 }
@@ -51,22 +52,24 @@ function Test-IsIgnored($relativePath, $ignoreList, [ref]$ignorePattern) {
 
 $ignorePattern = ''
 if (Test-IsIgnored $relativePath $ignoreList ([ref]$ignorePattern)) {
-    Write-Host "Soubor '$relativePath' je v seznamu ignorovanych podle masky '$ignorePattern'. Nebudu ho kopirovat -> koncim akci."
-    Write-Host ""
-    Write-Error "Error3: File in ignore list"
+    Write-Host "Error: Soubor '$relativePath' je v seznamu k ignorovani podle masky '$ignorePattern'. Nebudu ho kopirovat -> koncim akci."
     exit 3
 }
 
-Write-Host "Vsechno v poradu, ted se pokusim najit ve Windows disk s pico:ed-em."
+Write-Host "Soubor neni v seznamu k ignorovani. Ted se pokusim najit v OS disk s picoed-em."
 $destinationRoot = Find-CircuitPYDrive
-Write-Host "Nasel jsem. Disk s pico:ed-em je na '$destinationRoot'."
+Write-Host "Nasel jsem. Disk s picoed-em je na '$destinationRoot'."
 
-
-$sourcePath = Join-Path -Path $sourceRoot -ChildPath $relativePath
-$destPath = Join-Path -Path $destinationRoot -ChildPath $relativePath
-Write-Host "Uz vim ktery soubor chci kopirovat a mam i kam ho zkopirovat. Vezmu soubor 'zdroj' a nakopiruju ho do 'cil'"
-Write-Host "Zdroj: '$sourcePath'"
-Write-Host "Cil: '$destPath'"
+# Pokud je zadaná cesta absolutní (plná), necháme ji beze změny, jinak ji převedeme na úplnou
+if ([System.IO.Path]::IsPathRooted($relativePath)) {
+    $sourcePath = $relativePath
+} else {
+    $sourcePath = Join-Path -Path $sourceRoot -ChildPath $relativePath
+}
+$destPath = Join-Path -Path $destinationRoot -ChildPath (Split-Path -Path $relativePath -Leaf)
+Write-Host "Uz mam platny soubor, ktery chci zkopirovat, a mam ho i kam zkopirovat. Vezmu soubor 'zdroj' a nakopiruju ho do 'cil'"
+Write-Host "      zdroj: '$sourcePath'"
+Write-Host "      cil: '$destPath'"
 
 # Check if it's a directory or a file
 if (Test-Path $sourcePath -PathType Container) {
@@ -80,13 +83,19 @@ if (Test-Path $sourcePath -PathType Container) {
     if (!(Test-Path $destDir)) {
         New-Item -ItemType Directory -Path $destDir -Force
     }
-    Write-Host "Zacinam kopirovat."
-    try {
-        Copy-Item -Path $sourcePath -Destination $destPath -Force
-        Write-Host "Vypada to ze vsechno probehlo spravne."
-    } catch {
-        Write-Host "Kopirovani neprobehlo uspesne."
-        Write-Error "Error4: Copy operation failed"
-        exit 4
-    }    
+
+    # Check if source and destination paths are the same
+    if ($sourcePath -eq $destPath) {
+        Write-Host "Info: Zdroj a cilova cesta jsou stejne. Preskakuji kopirovani."
+    } else {
+        Write-Host "Zacinam kopirovat."
+        try {
+            Copy-Item -Path $sourcePath -Destination $destPath -Force
+            Write-Host "Info: Vypada to, ze vsechno probehlo spravne."
+        } catch {
+            Write-Host "Error: Kopirovani neprobehlo uspesne."
+            Write-Host "Error:" $_.Exception.Message
+            exit 4
+        }
+    }
 }
