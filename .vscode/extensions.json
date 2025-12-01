@@ -6,9 +6,8 @@
         "VisualStudioExptTeam.vscodeintellicode",
         "emeraldwalk.runonsave",
         "eamodio.gitlens",
-        "github.vscode-pull-request-github",
-        "makinteract.micro-bit-python",
+        "GitHub.vscode-pull-request-github",
         "jebbs.plantuml",
-        "ibm.output-colorizer",
+        "IBM.output-colorizer"
     ]
 }
