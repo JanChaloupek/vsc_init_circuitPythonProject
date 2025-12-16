@@ -1,6 +1,6 @@
 {
     "python.analysis.extraPaths": [
         "./lib",
-        "./lib_vsc_only",
-    ],
+        "./lib_vsc_only"
+    ]
 }
