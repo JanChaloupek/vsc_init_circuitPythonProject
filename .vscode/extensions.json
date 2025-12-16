@@ -1,7 +1,7 @@
 {
     "recommendations": [
         "ms-python.python",
-        "wmerkens.vscode-circuitpython-v2",
+        "wmerkens.vscode-circuitpython-v2-cursor-ai",
         "MagicStack.MagicPython",
         "VisualStudioExptTeam.vscodeintellicode",
         "emeraldwalk.runonsave",
