@@ -1,0 +1,14 @@
+{
+    "python.languageServer": "Pylance",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingModuleSource": "none",
+        "reportShadowedImports": "none"
+    },
+    "python.analysis.extraPaths": [
+        "./lib",
+        "./lib_vsc_only",
+    ],
+    "circuitpython.board.version": null,
+    "circuitpython.board.vid": "0x1209",
+    "circuitpython.board.pid": "0x4203"
+}
