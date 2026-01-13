@@ -6,7 +6,7 @@ param (
     [string]$ignoreFilePath         # relativni cesta k souboru se seznamem ignorovanych souboru  (treti parametr)
 )
 # Verze souboru:
-$version = "2025-04-27"
+$version = "2026-01-13"
 
 # Přepneme kodovani na UTF-8, aby se spravne zobrazoaly ceske znaky
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -50,9 +50,40 @@ function Test-IsIgnored($relativePath, $ignoreList, [ref]$ignorePattern) {
     return $false
 }
 
-$ignorePattern = ''
-if (Test-IsIgnored $relativePath $ignoreList ([ref]$ignorePattern)) {
-    Write-Host "Error: Soubor '$relativePath' je v seznamu k ignorovani podle masky '$ignorePattern'. Nebudu ho kopirovat -> koncim akci."
+# ------------------------------------------------------------
+# Funkce pro kontrolu, zda je relativní cesta v ignore listu
+# ------------------------------------------------------------
+function Test-IsIgnored {
+    param(
+        [string]$relativePath,
+        [string[]]$patterns
+    )
+
+    # Normalizace cesty: Windows "\" → POSIX "/"
+    $normalized = $relativePath -replace '\\','/'
+
+    foreach ($pattern in $patterns) {
+
+        # Normalizace masky
+        $p = $pattern -replace '\\','/'
+
+        # PowerShell neumí ** → nahradíme ho za *
+        # (funguje pro účely ignorování celých stromů)
+        $p = $p -replace '\*\*','*'
+
+        # Porovnání
+        if ($normalized -like $p) {
+            return $pattern
+        }
+    }
+
+    return $null
+}
+
+#$ignorePattern = ''
+$ignorePattern = Test-IsIgnored $relativePath $ignoreList
+if ($ignorePattern) {
+    Write-Host "Error: Soubor '$relativePath' je ignorován podle masky '$ignorePattern'. Nebudu ho kopírovat -> koncim akci."
     exit 3
 }
 
@@ -66,7 +97,7 @@ if ([System.IO.Path]::IsPathRooted($relativePath)) {
 } else {
     $sourcePath = Join-Path -Path $sourceRoot -ChildPath $relativePath
 }
-$destPath = Join-Path -Path $destinationRoot -ChildPath (Split-Path -Path $relativePath -Leaf)
+$destPath = Join-Path -Path $destinationRoot -ChildPath $relativePath
 Write-Host "Uz mam platny soubor, ktery chci zkopirovat, a mam ho i kam zkopirovat. Vezmu soubor 'zdroj' a nakopiruju ho do 'cil'"
 Write-Host "      zdroj: '$sourcePath'"
 Write-Host "      cil: '$destPath'"
@@ -75,13 +106,15 @@ Write-Host "      cil: '$destPath'"
 if (Test-Path $sourcePath -PathType Container) {
     # It's a directory, create it if needed
     if (!(Test-Path $destPath)) {
-        New-Item -ItemType Directory -Path $destPath -Force
+        New-Item -ItemType Directory -Path $destPath -Force | Out-Null
+        Write-Host "Vytvoren cilovy adresar: '$destPath'"
     }
 } else {
     # It's a file, make sure the directory exists first
     $destDir = Split-Path -Path $destPath -Parent
     if (!(Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        Write-Host "Vytvoren cilovy adresar: '$destDir'"
     }
 
     # Check if source and destination paths are the same
