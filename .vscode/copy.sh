@@ -1,9 +1,9 @@
 #!/bin/bash
-# Davka v Bash. Umi kopirovat soubory do disku se jmenem 'CIRCUITPY'
-# (což je jméno disku CircuitPythonu, který je nainstalován v pico:ed-u)
-# Verze souboru ze dne 2025-04-05
+# Kopírování souborů do CIRCUITPY (macOS/Linux)
+version="2026-01-13"
 
-# Kontrola počtu předaných parametrů
+shopt -s globstar nullglob
+
 if [ "$#" -ne 3 ]; then
     echo "Použití: $0 sourceRoot relativePath ignoreFilePath"
     exit 1
@@ -13,11 +13,10 @@ sourceRoot="$1"
 relativePath="$2"
 ignoreFilePath="$3"
 
-echo "----------------------------------------------------------"
+echo "-------(verze=$version)-----------------------------------------------"
 echo "Spouštím kopírování souboru do Pico:ed-u. Chci zkopírovat soubor '$relativePath' v adresáři '$sourceRoot'."
 echo "Zkouším načíst obsah souboru se seznamem ignorovaných položek '$ignoreFilePath'."
 
-# Cesta k souboru se seznamem ignorovaných položek
 ignoreFileFullPath="$sourceRoot/$ignoreFilePath"
 
 if [ ! -f "$ignoreFileFullPath" ]; then
@@ -25,18 +24,18 @@ if [ ! -f "$ignoreFileFullPath" ]; then
     exit 2
 fi
 
-# Načtení ignore listu do pole bez použití mapfile
+# Načtení ignore listu
 ignoreList=()
 while IFS= read -r line; do
     ignoreList+=("$line")
 done < "$ignoreFileFullPath"
 
-# Funkce pro kontrolu, zda je relativní cesta obsažena v ignore listu (podpora zástupných znaků)
+# Funkce pro kontrolu ignorování
 test_is_ignored() {
     local relpath="$1"
     shift
     for pattern in "$@"; do
-        # Bash porovnání s globbingem
+        # Bash globbing — funguje i s **
         if [[ "$relpath" == $pattern ]]; then
             echo "$pattern"
             return 0
@@ -45,7 +44,7 @@ test_is_ignored() {
     return 1
 }
 
-# Kontrola, zda soubor/adresář není v ignore listu
+# Test ignorování
 ignorePattern=$(test_is_ignored "$relativePath" "${ignoreList[@]}")
 if [ $? -eq 0 ]; then
     echo "Soubor '$relativePath' je v seznamu ignorovaných podle masky '$ignorePattern'. Nebudu ho kopírovat -> končím akci."
@@ -54,7 +53,7 @@ fi
 
 echo "Všechno v pořádku, teď se pokusím najít disk s pico:ed-em."
 
-# Funkce k nalezení disku s label 'CIRCUITPY' pro OS X
+# Najdi CIRCUITPY
 find_circuitpy_drive() {
     if [ -d "/Volumes/CIRCUITPY" ]; then
         echo "/Volumes/CIRCUITPY"
@@ -67,30 +66,35 @@ find_circuitpy_drive() {
 destinationRoot=$(find_circuitpy_drive)
 echo "Našel jsem. Disk s pico:ed-em je na '$destinationRoot'."
 
-# Sestavení úplných cest ke zdrojovému a cílovému souboru/adresáři
+# Sestavení cest
 sourcePath="$sourceRoot/$relativePath"
 destPath="$destinationRoot/$relativePath"
 
-echo "Už vím, který soubor chci kopírovat a mám i kam ho zkopírovat. Vezmu soubor 'zdroj' a nakopíruju ho do 'cíl':"
+echo "Už vím, který soubor chci kopírovat a mám i kam ho zkopírovat."
 echo "Zdroj: '$sourcePath'"
-echo "Cíl: '$destPath'"
+echo "Cíl:   '$destPath'"
 
-# Zkontrolujeme, zda je cesta adresář (Container) nebo soubor (Leaf)
+# Pokud je to adresář
 if [ -d "$sourcePath" ]; then
-    # Pokud jde o adresář, vytvoříme cílový adresář, pokud ještě neexistuje
-    mkdir -p "$destPath"
+    if [ ! -d "$destPath" ]; then
+        mkdir -p "$destPath"
+        echo "Vytvořen cílový adresář: '$destPath'"
+    fi
 else
-    # Pokud jde o soubor, nejprve zajistíme, aby existoval cílový adresář
+    # Pokud je to soubor
     destDir=$(dirname "$destPath")
-    mkdir -p "$destDir"
+    if [ ! -d "$destDir" ]; then
+        mkdir -p "$destDir"
+        echo "Vytvořen cílový adresář: '$destDir'"
+    fi
+
     echo "Začínám kopírovat."
     cp -f "$sourcePath" "$destPath"
-    
-    # Kontrola, zda příkaz cp skončil chybou
+
     if [ $? -ne 0 ]; then
         echo "Při kopírování došlo k chybě. Návratový kód přepínám na 4."
         exit 4
-    fi    
+    fi
 fi
 
 echo "Vypadá to, že všechno proběhlo správně."
