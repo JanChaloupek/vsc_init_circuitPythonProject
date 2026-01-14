@@ -1,1 +1,6 @@
-lib_vsc_only\*.*
+run_test.py
+run_coverage.py
+lib_vsc_only/*
+lib_vsc_only/**
+tests/*
+tests/**
