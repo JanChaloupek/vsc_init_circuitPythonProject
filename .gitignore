@@ -1,4 +1,7 @@
+__pycache__/
+.venv/
 .vscode/
 lib/
 lib_vsc_only/
 .gitignore
+*.code-workspace
