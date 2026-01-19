@@ -1,185 +1,227 @@
-# SPDX-FileCopyrightText: 2016 Damien P. George
-# SPDX-FileCopyrightText: 2017 Scott Shawcroft for Adafruit Industries
-# SPDX-FileCopyrightText: 2019 Carter Nelson
-# SPDX-FileCopyrightText: 2019 Roy Hooper
-#
-# SPDX-License-Identifier: MIT
-
 """
-`neopixel` - NeoPixel strip driver
-====================================================
+neopixel.py – společný stub pro VS Code a fake hardware pro testy.
 
-* Author(s): Damien P. George, Scott Shawcroft, Carter Nelson, Rose Hooper
+Tento modul napodobuje CircuitPython knihovnu `neopixel`, která slouží
+k ovládání adresovatelných RGB/RGBW LED (WS2812, SK6812 atd.).
+
+V této verzi:
+- modul je určený pro vývoj na PC (VS Code / Pylance)
+- funguje jako fake hardware pro unit testy
+- nevyžaduje žádný skutečný mikrořadič ani LED pásky
+- chová se deterministicky a ukládá barvy do Python seznamu
+- podporuje auto_write, brightness a pixel_order (symbolicky)
+
+Reálný modul `neopixel` je součástí CircuitPythonu a není dostupný na PC.
+Tento soubor slouží pro výuku, vývoj a testování.
 """
 
-import sys
-import board
 import digitalio
-from neopixel_write import neopixel_write
 
-import adafruit_pixelbuf
+# ---------------------------------------------------------
+# Pixel order constants (kompatibilní s CircuitPython API)
+# ---------------------------------------------------------
 
-try:
-    # Used only for typing
-    from typing import Optional, Type
-    from types import TracebackType
-    import microcontroller
-except ImportError:
+RGB = "RGB"
+GRB = "GRB"
+RGBW = "RGBW"
+GRBW = "GRBW"
+
+
+def neopixel_write(pin, buf):
+    """
+    Fake implementace nízkoúrovňového zápisu do NeoPixel LED.
+
+    V reálném CircuitPythonu:
+        - neopixel_write generuje přesné časování signálu
+        - používá DMA nebo přesné instrukce
+
+    V této fake verzi:
+        - funkce nedělá nic
+        - slouží pouze pro kompatibilitu API
+    """
     pass
 
 
-__version__ = "0.0.0+auto.0"
-__repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git"
+# ---------------------------------------------------------
+# Fake Pixel Buffer
+# ---------------------------------------------------------
 
-
-# Pixel color order constants
-RGB = "RGB"
-"""Red Green Blue"""
-GRB = "GRB"
-"""Green Red Blue"""
-RGBW = "RGBW"
-"""Red Green Blue White"""
-GRBW = "GRBW"
-"""Green Red Blue White"""
-
-
-class NeoPixel(adafruit_pixelbuf.PixelBuf):
+class _PixelBuf:
     """
-    A sequence of neopixels.
+    Fake pixel buffer používaný jako stub i test double.
 
-    :param ~microcontroller.Pin pin: The pin to output neopixel data on.
-    :param int n: The number of neopixels in the chain
-    :param int bpp: Bytes per pixel. 3 for RGB and 4 for RGBW pixels.
-    :param float brightness: Brightness of the pixels between 0.0 and 1.0 where 1.0 is full
-      brightness
-    :param bool auto_write: True if the neopixels should immediately change when set. If False,
-      `show` must be called explicitly.
-    :param str pixel_order: Set the pixel color channel order. The default is GRB if bpp is set
-      to 3, otherwise GRBW is used as the default.
+    V reálném zařízení:
+        - PixelBuf spravuje interní buffer LED
+        - podporuje různé formáty (RGB, GRB, RGBW)
+        - brightness se aplikuje při zápisu
 
-    Example for Circuit Playground Express:
+    V této fake verzi:
+        - barvy se ukládají do Python seznamu self._pixels
+        - brightness se neaplikuje (symbolické)
+        - auto_write volá show() automaticky
+        - show() pouze nastaví příznak write_called
 
-    .. code-block:: python
+    Atributy:
+        _pixels       – seznam barev [(r,g,b), ...]
+        write_called  – True, pokud byla volána show()
+    """
 
-        import neopixel
-        from board import *
+    def __init__(self, n, *, brightness=1.0, byteorder="GRB", auto_write=True):
+        self._n = n
+        self.brightness = brightness
+        self.auto_write = auto_write
+        self.byteorder = byteorder
 
-        RED = 0x100000 # (0x10, 0, 0) also works
+        # Fake LED buffer
+        self._pixels = [(0, 0, 0)] * n
 
-        pixels = neopixel.NeoPixel(NEOPIXEL, 10)
-        for i in range(len(pixels)):
-            pixels[i] = RED
+        # Pro testy: zda byla volána show()
+        self.write_called = False
 
-    Example for Circuit Playground Express setting every other pixel red using a slice:
+    def __len__(self):
+        """Vrací počet LED."""
+        return self._n
 
-    .. code-block:: python
+    def __getitem__(self, index):
+        """Vrací barvu LED na daném indexu."""
+        return self._pixels[index]
 
-        import neopixel
-        from board import *
-        import time
+    def __setitem__(self, index, value):
+        """
+        Nastaví barvu LED.
 
-        RED = 0x100000 # (0x10, 0, 0) also works
+        Pokud je auto_write=True, automaticky zavolá show().
+        """
+        self._pixels[index] = tuple(value)
+        if self.auto_write:
+            self.show()
 
-        # Using ``with`` ensures pixels are cleared after we're done.
-        with neopixel.NeoPixel(NEOPIXEL, 10) as pixels:
-            pixels[::2] = [RED] * (len(pixels) // 2)
-            time.sleep(2)
+    def fill(self, color):
+        """
+        Nastaví stejnou barvu pro všechny LED.
 
-    .. py:method:: NeoPixel.show()
+        Pokud je auto_write=True, automaticky zavolá show().
+        """
+        self._pixels = [tuple(color)] * self._n
+        if self.auto_write:
+            self.show()
 
-        Shows the new colors on the pixels themselves if they haven't already
-        been autowritten.
+    def show(self):
+        """
+        Fake implementace zápisu do LED.
 
-        The colors may or may not be showing after this function returns because
-        it may be done asynchronously.
+        V reálném zařízení:
+            - odešle buffer do LED přes přesné časování
 
-    .. py:method:: NeoPixel.fill(color)
+        V této fake verzi:
+            - pouze nastaví příznak write_called=True
+            - testy mohou ověřit, že došlo k zápisu
+        """
+        self.write_called = True
 
-        Colors all pixels the given ***color***.
 
-    .. py:attribute:: brightness
+# ---------------------------------------------------------
+# Fake NeoPixel
+# ---------------------------------------------------------
 
-        Overall brightness of the pixel (0 to 1.0)
+class NeoPixel(_PixelBuf):
+    """
+    Fake implementace třídy NeoPixel z CircuitPythonu.
 
+    V reálném zařízení:
+        - NeoPixel ovládá LED přes digitální pin
+        - používá PixelBuf pro správu barev
+        - podporuje context manager (__enter__/__exit__)
+
+    V této fake verzi:
+        - používá DigitalInOut jako fake pin
+        - ukládá barvy do Python seznamu
+        - je plně testovatelný bez hardware
     """
 
     def __init__(
         self,
-        pin: microcontroller.Pin,
-        n: int,
+        pin,
+        n,
         *,
-        bpp: int = 3,
-        brightness: float = 1.0,
-        auto_write: bool = True,
-        pixel_order: str = None
+        bpp=3,
+        brightness=1.0,
+        auto_write=True,
+        pixel_order=None
     ):
-        if not pixel_order:
-            pixel_order = GRB if bpp == 3 else GRBW
-        elif isinstance(pixel_order, tuple):
-            order_list = [RGBW[order] for order in pixel_order]
-            pixel_order = "".join(order_list)
+        """
+        Inicializuje fake NeoPixel.
 
-        self._power = None
-        if (
-            sys.implementation.version[0] >= 7
-            and getattr(board, "NEOPIXEL", None) == pin
-        ):
-            power = getattr(board, "NEOPIXEL_POWER_INVERTED", None)
-            polarity = power is None
-            if not power:
-                power = getattr(board, "NEOPIXEL_POWER", None)
-            if power:
-                try:
-                    self._power = digitalio.DigitalInOut(power)
-                    self._power.switch_to_output(value=polarity)
-                except ValueError:
-                    pass
+        Parametry:
+            pin         – libovolný objekt reprezentující pin (např. board.P0)
+            n           – počet LED
+            bpp         – bytes per pixel (3 = RGB, 4 = RGBW)
+            brightness  – symbolická hodnota (neaplikuje se)
+            auto_write  – pokud True, změny se ihned projeví
+            pixel_order – pořadí barev (RGB/GRB/RGBW/GRBW)
+        """
+        if pixel_order is None:
+            pixel_order = GRB if bpp == 3 else GRBW
 
         super().__init__(
-            n, brightness=brightness, byteorder=pixel_order, auto_write=auto_write
+            n,
+            brightness=brightness,
+            byteorder=pixel_order,
+            auto_write=auto_write,
         )
 
+        # Fake pin object
         self.pin = digitalio.DigitalInOut(pin)
         self.pin.direction = digitalio.Direction.OUTPUT
+        self._power = None
 
+    def deinit(self):
+        """
+        Fake uvolnění NeoPixel objektu.
 
-    def deinit(self) -> None:
-        """Blank out the NeoPixels and release the pin."""
-        self.fill(0)
+        V reálném zařízení:
+            - vypne LED
+            - uvolní pin
+
+        Zde:
+            - nastaví všechny LED na (0,0,0)
+            - označí zápis
+            - zneplatní pin
+        """
+        self.fill((0, 0, 0))
         self.show()
-        self.pin.deinit()
-        if self._power:
-            self._power.deinit()
-
+        self.pin = None
+        self._power = None
 
     def __enter__(self):
+        """Podpora context manageru."""
         return self
 
-    def __exit__(
-        self,
-        exception_type: Optional[Type[BaseException]],
-        exception_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ):
+    def __exit__(self, exc_type, exc, tb):
+        """Při ukončení context manageru vypne LED."""
         self.deinit()
 
-    def __repr__(self):
-        return "[" + ", ".join([str(x) for x in self]) + "]"
-
     @property
-    def n(self) -> int:
-        """
-        The number of neopixels in the chain (read-only)
-        """
+    def n(self):
+        """Vrací počet LED (kompatibilní s CircuitPython API)."""
         return len(self)
 
+    def write(self):
+        """
+        Alias pro show().
 
-    def write(self) -> None:
-        """.. deprecated: 1.0.0
-
-        Use ``show`` instead. It matches Micro:Bit and Arduino APIs."""
+        CircuitPython používá write() jako starší API.
+        """
         self.show()
 
+    def _transmit(self, buffer):
+        """
+        Fake nízkoúrovňový přenos dat.
 
-    def _transmit(self, buffer: bytearray) -> None:
+        V reálném zařízení:
+            - odesílá raw buffer do LED
+
+        Zde:
+            - pouze volá neopixel_write() (které nic nedělá)
+        """
         neopixel_write(self.pin, buffer)
