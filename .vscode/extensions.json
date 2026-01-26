@@ -1,13 +1,20 @@
 {
     "recommendations": [
         "ms-python.python",
+        "ms-python.vscode-pylance",
         "wmerkens.vscode-circuitpython-v2-cursor-ai",
         "MagicStack.MagicPython",
         "VisualStudioExptTeam.vscodeintellicode",
         "emeraldwalk.runonsave",
+        "fabiospampinato.vscode-action-buttons",
+        "ms-vscode.powershell",
         "eamodio.gitlens",
         "GitHub.vscode-pull-request-github",
         "jebbs.plantuml",
         "IBM.output-colorizer"
+    ],
+    "unwantedRecommendations": [
+        "ms-python.autopep8",
+        "ms-python.black-formatter"
     ]
 }
