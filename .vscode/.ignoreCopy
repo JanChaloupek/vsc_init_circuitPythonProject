@@ -1,6 +1,6 @@
 run_test.py
 run_coverage.py
-lib_vsc_only/*
-lib_vsc_only/**
+_stubs/*
+_stubs/**
 tests/*
 tests/**

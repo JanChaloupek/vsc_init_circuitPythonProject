@@ -4,11 +4,12 @@
         "reportMissingModuleSource": "none",
         "reportShadowedImports": "none"
     },
+    "python.analysis.stubPath": "_stubs",
     "python.analysis.extraPaths": [
         "./lib",
-        "./lib_vsc_only",
+        "./_stubs",
     ],
     "circuitpython.board.version": null,
-    "circuitpython.board.vid": "0x1209",
-    "circuitpython.board.pid": "0x4203"
+    "circuitpython.board.vid": "0x2E8A",
+    "circuitpython.board.pid": "0x1026",
 }
