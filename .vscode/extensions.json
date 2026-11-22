@@ -12,8 +12,7 @@
         "GitHub.vscode-pull-request-github",
         "jebbs.plantuml",
         "IBM.output-colorizer",
-        "huibizhang.codesnap-plus",
-        "adpyke.codesnap"
+        "eugenejeon.codesnap-plus-fix"
     ],
     "unwantedRecommendations": [
         "ms-python.autopep8",
