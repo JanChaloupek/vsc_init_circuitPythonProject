@@ -1,8 +1,7 @@
 __pycache__/
 .venv/
-.vscode/
 _backups/
+*.code-workspace
 lib/*
 !lib/.gitkeep
-.gitignore
-*.code-workspace
+!lib/picoed_v2_lib/

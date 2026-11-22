@@ -1,0 +1,5 @@
+# Seznam souboru a adresaru k uploadu
+main.py
+display.py
+pio_pin_test.py
+lib
