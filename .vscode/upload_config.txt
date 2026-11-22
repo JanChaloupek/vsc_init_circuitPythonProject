@@ -1,5 +1,3 @@
-# Seznam souboru a adresaru k uploadu
+# Seznam souboru a adresaru k uploadu na MicroPython zarizeni
 main.py
-display.py
-pio_pin_test.py
 lib

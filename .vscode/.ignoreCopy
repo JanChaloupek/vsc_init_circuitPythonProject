@@ -1,6 +1,7 @@
 run_test.py
 run_coverage.py
 mpy.cmd
+main.py
 _stubs/*
 _stubs/**
 _fake/*
