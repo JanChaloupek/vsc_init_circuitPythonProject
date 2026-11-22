@@ -53,14 +53,40 @@ fi
 
 echo "Všechno v pořádku, teď se pokusím najít disk s pico:ed-em."
 
-# Najdi CIRCUITPY
+# Najdi disk CIRCUITPY pro macOS i Linux
 find_circuitpy_drive() {
+    # 1. macOS (/Volumes/CIRCUITPY)
     if [ -d "/Volumes/CIRCUITPY" ]; then
         echo "/Volumes/CIRCUITPY"
-    else
-        echo "Nenašel jsem disk se jménem 'CIRCUITPY'. Nemám tedy kam soubor nakopírovat -> končím akci." >&2
-        exit 1
+        return 0
     fi
+    # 2. Linux - Ubuntu, Debian, Mint (/media/$USER/CIRCUITPY)
+    for d in /media/*/CIRCUITPY; do
+        if [ -d "$d" ]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    # 3. Linux - Fedora, Arch, openSUSE (/run/media/*/*/CIRCUITPY)
+    for d in /run/media/*/*/CIRCUITPY /run/media/*/CIRCUITPY; do
+        if [ -d "$d" ]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    # 4. Manuální přípojný bod (/mnt/CIRCUITPY)
+    if [ -d "/mnt/CIRCUITPY" ]; then
+        echo "/mnt/CIRCUITPY"
+        return 0
+    fi
+    # 5. Volitelná proměnná prostředí CIRCUITPY_PATH (pro testování a kontejnery)
+    if [ -n "$CIRCUITPY_PATH" ] && [ -d "$CIRCUITPY_PATH" ]; then
+        echo "$CIRCUITPY_PATH"
+        return 0
+    fi
+
+    echo "Nenašel jsem disk se jménem 'CIRCUITPY' v /Volumes, /media ani /run/media. Nemám tedy kam soubor nakopírovat -> končím akci." >&2
+    exit 1
 }
 
 destinationRoot=$(find_circuitpy_drive)
