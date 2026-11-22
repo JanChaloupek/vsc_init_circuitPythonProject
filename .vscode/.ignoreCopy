@@ -2,5 +2,7 @@ run_test.py
 run_coverage.py
 _stubs/*
 _stubs/**
+_fake/*
+_fake/**
 tests/*
 tests/**

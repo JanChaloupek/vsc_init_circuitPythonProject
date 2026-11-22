@@ -7,9 +7,9 @@
     "python.analysis.stubPath": "_stubs",
     "python.analysis.extraPaths": [
         "./lib",
-        "./_stubs",
+        "./_stubs"
     ],
     "circuitpython.board.version": null,
     "circuitpython.board.vid": "0x2E8A",
-    "circuitpython.board.pid": "0x1026",
+    "circuitpython.board.pid": "0x1026"
 }
