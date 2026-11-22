@@ -11,7 +11,9 @@
         "eamodio.gitlens",
         "GitHub.vscode-pull-request-github",
         "jebbs.plantuml",
-        "IBM.output-colorizer"
+        "IBM.output-colorizer",
+        "huibizhang.codesnap-plus",
+        "adpyke.codesnap"
     ],
     "unwantedRecommendations": [
         "ms-python.autopep8",
