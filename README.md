@@ -1,13 +1,25 @@
-# Počáteční pracovní adresář pro projekt ve VS Code s Pico:ed
+# Počáteční pracovní adresář pro projekt ve VS Code s Pico:ed (CircuitPython & MicroPython)
 
-Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v CircuitPythonu na desce **Pico:ed v2** (Raspberry Pi RP2040) v editoru **Visual Studio Code**.
+Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **CircuitPythonu** i **MicroPythonu** na desce **Pico:ed v2** (Raspberry Pi RP2040) a BBC micro:bit v editoru **Visual Studio Code**.
 
 ### Obsah projektu:
-- **`.vscode/`** – Konfigurace editoru pro CircuitPython (`settings.json`), doporučená rozšíření (`extensions.json`), pravidla pro ignorování souborů při nahrávání (`.ignoreCopy`) a automatické nahrávací skripty:
-  - `copy.ps1` – skript pro Windows (autor Jan Chaloupek)
-  - `copy.sh` – skript pro macOS a Linux (autor Robin Bortlík, úprava Jan Chaloupek)
-- **`_stubs/`** – Typové stuby a fake moduly CircuitPythonu (`board`, `busio`, `digitalio`, `picoed`, `neopixel`, `pwmio`, `analogio`, `adafruit_ticks`, `time`). Podtržítko v názvu značí, že jde o interní knihovny pro editor a offline unit testy na PC, které se nekopírují do robota. Plně nahrazuje dřívější složku `lib_vsc_only/`.
-- **`lib/`** – Složka pro knihovny hardware robota (zrcadlí složku `lib` na disku `CIRCUITPY`).
-- **`pyrightconfig.json`** – Konfigurace analyzátoru Pylance/Pyright pro okamžitou nápovědu (IntelliSense) a typovou kontrolu bez falešných chybových hlášení.
-- **`code.py`** – Výchozí spouštěný program pro Pico:ed (blikání vestavěné LED).
+- **`.vscode/`** – Konfigurace editoru (`settings.json`), doporučená rozšíření (`extensions.json`), pravidla pro ignorování souborů při nahrávání (`.ignoreCopy`) a nahrávací/ovládací skripty:
+  - **CircuitPython podpora:**
+    - `copy.ps1` – automatické nahrávání při uložení pro Windows (autor Jan Chaloupek)
+    - `copy.sh` – automatické nahrávání pro macOS a Linux (autor Robin Bortlík, úprava Jan Chaloupek)
+  - **MicroPython podpora:**
+    - `setup.bat` / `setup.ps1` – jednorázová příprava prostředí (kontrola Pythonu, instalace `mpremote` a rozšíření `micropython-panel`)
+    - `upload.ps1` / `upload_main.ps1` – nahrání projektu na desku přes `mpremote` podle `upload_config.txt`
+    - `repl.ps1` – otevření interaktivní konzole MicroPython REPL
+    - `list.ps1` – výpis souborů uložených na desce
+    - `wipe.ps1` – bezpečné vymazání souborů z desky
+    - `mpy.ps1` / `mpy.cmd` – rychlý CLI launcher pro příkazy MicroPythonu
+    - `dist/micropython-panel.vsix` – vestavěné rozšíření pro VS Code s tlačítky v Activity Baru i Status Baru
+- **`_stubs/`** – Typové stuby pro nápovědu (IntelliSense) a offline testy na PC:
+  - CircuitPython: `board`, `busio`, `digitalio`, `picoed`, `neopixel`, `pwmio`, `analogio`, `adafruit_ticks`, `time`
+  - MicroPython: `machine`, `rp2`
+- **`lib/`** – Složka pro knihovny hardware:
+  - `picoed_v2_lib/` – oficiální MicroPython knihovna pro Pico:ed v2 (displej IS31FL3731, tlačítka, neopixel LED, bzučák, ultrazvukový senzor)
+- **`pyrightconfig.json`** – Konfigurace analyzátoru Pylance/Pyright pro okamžitou nápovědu bez falešných chybových hlášení.
+- **`code.py`** – Výchozí spouštěný program pro CircuitPython (blikání vestavěné LED).
 - **`.gitignore`** – Vyloučení dočasných a systémových souborů z verzování.

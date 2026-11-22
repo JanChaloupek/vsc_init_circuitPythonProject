@@ -11,5 +11,60 @@
     ],
     "circuitpython.board.version": null,
     "circuitpython.board.vid": "0x2E8A",
-    "circuitpython.board.pid": "0x1026"
+    "circuitpython.board.pid": "0x1026",
+
+    "actionButtons": {
+        "defaultColor": "#ffffff",
+        "loadNpmCommands": false,
+        "commands": [
+            {
+                "name": "⬆ Upload project (MicroPython)",
+                "command": "powershell -ExecutionPolicy Bypass -File .vscode/upload.ps1",
+                "color": "yellow"
+            },
+            {
+                "name": "▶ REPL (MicroPython)",
+                "command": "powershell -ExecutionPolicy Bypass -File .vscode/repl.ps1",
+                "color": "lightgreen"
+            },
+            {
+                "name": "📂 List files (MicroPython)",
+                "command": "powershell -ExecutionPolicy Bypass -File .vscode/list.ps1",
+                "color": "lightblue"
+            },
+            {
+                "name": "🗑 Wipe device (MicroPython)",
+                "command": "powershell -ExecutionPolicy Bypass -File .vscode/wipe.ps1",
+                "color": "red"
+            }
+        ]
+    },
+    "micropython.enableStatusToolbar": true,
+    "micropython.autoOpenPanel": true,
+    "micropython.commands": [
+        {
+            "id": "upload",
+            "name": "⬆ Upload project",
+            "command": "powershell -ExecutionPolicy Bypass -File .vscode/upload.ps1",
+            "color": "yellow"
+        },
+        {
+            "id": "repl",
+            "name": "▶ REPL",
+            "command": "powershell -ExecutionPolicy Bypass -File .vscode/repl.ps1",
+            "color": "lightgreen"
+        },
+        {
+            "id": "list",
+            "name": "📂 List files",
+            "command": "powershell -ExecutionPolicy Bypass -File .vscode/list.ps1",
+            "color": "lightblue"
+        },
+        {
+            "id": "wipe",
+            "name": "🗑 Wipe device",
+            "command": "powershell -ExecutionPolicy Bypass -File .vscode/wipe.ps1",
+            "color": "red"
+        }
+    ]
 }

@@ -1,8 +1,13 @@
 run_test.py
 run_coverage.py
+mpy.cmd
 _stubs/*
 _stubs/**
 _fake/*
 _fake/**
 tests/*
 tests/**
+.vscode/dist/*
+.vscode/dist/**
+lib/picoed_v2_lib/*
+lib/picoed_v2_lib/**
