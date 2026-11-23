@@ -4,6 +4,9 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 
 ### Obsah projektu:
 - **`.vscode/`** – Konfigurace editoru (`settings.json`), doporučená rozšíření (`extensions.json`), pravidla pro ignorování souborů při nahrávání (`.ignoreCopy`) a nahrávací/ovládací skripty:
+  - **Instalační skripty prostředí:**
+    - `setup-MicroPython.bat` / `setup-MicroPython.ps1` – jednorázová příprava prostředí pro MicroPython (kontrola Pythonu, instalace `mpremote`, rozšíření `micropython-panel` a doporučených rozšíření z Marketplace)
+    - `setup-CircuitPython.bat` / `setup-CircuitPython.ps1` – jednorázová příprava prostředí pro CircuitPython (instalace CircuitPython rozšíření z Marketplace, kontrola USB disku CIRCUITPY)
   - **CircuitPython podpora:**
     - `copy.ps1` – automatické nahrávání při uložení pro Windows (autor Jan Chaloupek)
     - `copy.sh` – automatické nahrávání pro macOS a Linux (autor Robin Bortlík, úprava Jan Chaloupek)
