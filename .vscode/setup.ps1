@@ -1,96 +1,97 @@
-# ------------------------------------------------------------
-# Kontrola instalace Pythonu, pipu a mpremote
+﻿# ------------------------------------------------------------
+# setup.ps1
 #
-# Ucel:
-#   Zkontroluje instalaci Pythonu, pipu a mpremote.
-#   Pokud neco chybi, pokusi se to nainstalovat.
-#   Spousti se pouze jednou po instalaci VS Code.
+# Účel:
+#   Kompletní jednorázová příprava vývojového prostředí
+#   pro MicroPython i CircuitPython ve VS Code:
+#     1) Kontrola Pythonu (případná tichá instalace)
+#     2) Kontrola pipu
+#     3) Instalace nástroje mpremote (pro MicroPython)
+#     4) Detekce VS Code CLI
+#     5) Instalace rozšíření MicroPython Panel (.vsix)
+#     6) Hromadná instalace rozšíření z Marketplace (obě platformy)
+#     7) Kontrola a detekce připojeného hardware (Pico, Pico:ed apod.)
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "1.1"
-$ScriptDate    = "2026-01-26"
+$ScriptVersion = "2.0"
+$ScriptDate    = "2026-11-24"
 
 . "$PSScriptRoot/utils.ps1"
 
-Write-Host "$ScriptName - version: $ScriptVersion ($ScriptDate)" @ColorInfo
-Write-Host "--------------------------------------"
+Write-Host "============================================================" @ColorInfo
+Write-Host "  $ScriptName - verze: $ScriptVersion ($ScriptDate)" @ColorInfo
+Write-Host "  Kompletni priprava prostredi: MicroPython & CircuitPython" @ColorInfo
+Write-Host "============================================================"
+Write-Host ""
 
 # ------------------------------------------------------------
 # 1) Check Python
 # ------------------------------------------------------------
-Write-Host "Checking Python..." @ColorInfo
+Write-Host "[1/7] Kontrola instalace Pythonu..." @ColorInfo
 
 python --version 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Python not found." @ColorError
-    Write-Host "Downloading Python installer..." @ColorInfo
+    Write-Host "Python nenalezen. Stahuji instalator z python.org..." @ColorError
 
     $installer = "$env:TEMP\python-installer.exe"
     Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe" -OutFile $installer
 
-    Write-Host "Installing Python..." @ColorInfo
+    Write-Host "Instaluji Python..." @ColorInfo
     Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
 
-    Write-Host "Python installed." @ColorDone
+    Write-Host "Python uspesne nainstalovan." @ColorDone
 } else {
-    Write-Host "Python OK" @ColorDone
+    $pyVer = python --version 2>&1
+    Write-Host "Python OK ($pyVer)" @ColorDone
 }
-
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
 # 2) Check pip
 # ------------------------------------------------------------
-Write-Host "Checking pip..." @ColorInfo
+Write-Host "[2/7] Kontrola balickovaciho nastroje pip..." @ColorInfo
 
 python -m pip --version 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "pip not found. Installing..." @ColorError
+    Write-Host "pip nenalezen. Inicializuji..." @ColorError
 
     python -m ensurepip --default-pip
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "pip installation failed." @ColorError
+        Write-Host "Instalace pipu selhala." @ColorError
         exit 1
     }
 
-    Write-Host "pip installed." @ColorDone
+    Write-Host "pip uspesne nainstalovan." @ColorDone
 } else {
     Write-Host "pip OK" @ColorDone
 }
-
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 3) Check mpremote
+# 3) Check mpremote (MicroPython komunikace)
 # ------------------------------------------------------------
-Write-Host "Checking mpremote..." @ColorInfo
+Write-Host "[3/7] Kontrola nastroje mpremote (MicroPython)..." @ColorInfo
 
 python -m mpremote --help >$null 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "mpremote not found. Installing..." @ColorError
+    Write-Host "mpremote nenalezen. Instaluji pres pip..." @ColorInfo
 
     python -m pip install mpremote
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "mpremote installation failed." @ColorError
+        Write-Host "Instalace mpremote selhala." @ColorError
         exit 1
     }
 
-    Write-Host "mpremote installed." @ColorDone
+    Write-Host "mpremote uspesne nainstalovan." @ColorDone
 } else {
     Write-Host "mpremote OK" @ColorDone
 }
-
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 4) Instaling MicroPython-panel
+# 4) Detekce VS Code CLI
 # ------------------------------------------------------------
-Write-Host "Installing MicroPython VS Code extension..." @ColorInfo
-
-$vsix = Join-Path $PSScriptRoot "dist/micropython-panel.vsix"
-
-# Robustní autodetekce VS Code CLI
-Write-Host "Checking for VS Code CLI..."
+Write-Host "[4/7] Detekce rozhrani VS Code CLI..." @ColorInfo
 
 $possiblePaths = @(
     "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd",
@@ -103,13 +104,10 @@ $possiblePaths = @(
 )
 
 $codeCmd = $null
-
-# 1) Zkus PATH
 if (Get-Command "code" -ErrorAction SilentlyContinue) {
     $codeCmd = "code"
 }
 
-# 2) Pokud není v PATH, hledej v typických instalacích
 if (-not $codeCmd) {
     foreach ($path in $possiblePaths) {
         if (Test-Path $path) {
@@ -119,18 +117,92 @@ if (-not $codeCmd) {
     }
 }
 
-# 3) Vyhodnocení výsledku
 if (-not $codeCmd) {
-    Write-Host "VS Code CLI not found. Skipping extension installation." @ColorError
+    Write-Host "VS Code CLI nenalezen. Preskakuji automatickou instalaci rozsireni." @ColorError
+    exit 1
 } else {
-    Write-Host "VS Code CLI found at: $codeCmd" @ColorDone
+    Write-Host "VS Code CLI nalezen: $codeCmd" @ColorDone
+}
+Write-Host "--------------------------------------"
+
+# ------------------------------------------------------------
+# 5) Instalace MicroPython Panelu
+# ------------------------------------------------------------
+Write-Host "[5/7] Instalace rozsireni MicroPython Panel..." @ColorInfo
+
+$vsix = Join-Path $PSScriptRoot "dist\micropython-panel.vsix"
+if (Test-Path $vsix) {
     & $codeCmd --install-extension $vsix --force
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "MicroPython extension installed/updated." @ColorDone
+        Write-Host "MicroPython Panel uspesne nainstalovan/aktualizovan." @ColorDone
     } else {
-        Write-Host "Extension installation failed." @ColorError
+        Write-Host "Instalace MicroPython Panelu selhala." @ColorError
+    }
+} else {
+    Write-Host "Upozorneni: Balicek $vsix nebyl nalezen." @ColorError
+}
+Write-Host "--------------------------------------"
+
+# ------------------------------------------------------------
+# 6) Hromadne instalace rozsireni z Marketplace
+# ------------------------------------------------------------
+Write-Host "[6/7] Instalace spolecnych rozsireni z Marketplace..." @ColorInfo
+
+$allExtensions = @(
+    @{ Id = "ms-python.python";                            Name = "Python (jazykova podpora)" },
+    @{ Id = "ms-python.vscode-pylance";                   Name = "Pylance (analyza kodu a naseptavani)" },
+    @{ Id = "wmerkens.vscode-circuitpython-v2-cursor-ai";  Name = "CircuitPython podpora" },
+    @{ Id = "streetsidesoftware.code-spell-checker";       Name = "Code Spell Checker" },
+    @{ Id = "streetsidesoftware.code-spell-checker-czech"; Name = "Czech - Code Spell Checker" },
+    @{ Id = "oderwat.indent-rainbow";                      Name = "Indent Rainbow (barevne odsazeni)" },
+    @{ Id = "ms-vscode.powershell";                        Name = "PowerShell podpora" }
+)
+
+foreach ($ext in $allExtensions) {
+    Write-Host "  -> Instaluji $($ext.Name) [$($ext.Id)] ... " -NoNewline
+    & $codeCmd --install-extension $ext.Id --force | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[OK]" @ColorDone
+    } else {
+        Write-Host "[CHYBA]" @ColorError
+    }
+}
+Write-Host "--------------------------------------"
+
+# ------------------------------------------------------------
+# 7) Detekce pripojeneho hardware
+# ------------------------------------------------------------
+Write-Host "[7/7] Kontrola pripojeni vyvojove desky..." @ColorInfo
+
+$hwFound = $false
+
+# A) CircuitPython disk
+$circuitDrive = Get-Volume 2>$null | Where-Object { $_.FileSystemLabel -like "*CIRCUIT*" } | Select-Object -First 1
+if ($circuitDrive) {
+    Write-Host "  [CircuitPython] Nalezen disk: $($circuitDrive.DriveLetter): ($($circuitDrive.FileSystemLabel))" @ColorDone
+    $bootOut = "$($circuitDrive.DriveLetter):\boot_out.txt"
+    if (Test-Path $bootOut) {
+        $info = Get-Content $bootOut -TotalCount 1
+        Write-Host "    -> $info" @ColorInfo
+    }
+    $hwFound = $true
+}
+
+# B) MicroPython desky pres mpremote
+$devs = python -m mpremote devs 2>$null
+if ($devs) {
+    $lines = $devs -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
+    foreach ($line in $lines) {
+        Write-Host "  [MicroPython] Nalezen COM port: $line" @ColorDone
+        $hwFound = $true
     }
 }
 
-Write-Host "--------------------------------------"
-Write-Host "Setup complete. You can continue." @ColorDone
+if (-not $hwFound) {
+    Write-Host "  Zadna deska neni prave pripojena pres USB (to nevadi, prostredi je pripraveno)." @ColorFile
+}
+
+Write-Host "============================================================" @ColorDone
+Write-Host "  Instalace je KOMPLETNI! Prostredi je pripraveno." @ColorDone
+Write-Host "  Muzete pracovat s MicroPythonem i CircuitPythonem." @ColorDone
+Write-Host "============================================================" @ColorDone

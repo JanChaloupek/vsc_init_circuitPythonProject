@@ -3,15 +3,17 @@
 Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **CircuitPythonu** i **MicroPythonu** na desce **Pico:ed v2** (Raspberry Pi RP2040) a BBC micro:bit v editoru **Visual Studio Code**.
 
 ### Obsah projektu:
+- **`setup.bat`** / **`.vscode/setup.bat`** – **Jednorázová kompletní příprava prostředí pro studenty** (spustí `.vscode/setup.ps1`):
+  - automatická kontrola/instalace Pythonu a pipu
+  - instalace nástroje `mpremote` pro MicroPython
+  - instalace vestavěného rozšíření `micropython-panel.vsix`
+  - hromadná instalace rozšíření z Marketplace (Python, Pylance, CircuitPython, Spell Checker, Indent Rainbow)
+  - automatická detekce připojené desky (USB disk CIRCUITPY i COM porty)
 - **`.vscode/`** – Konfigurace editoru (`settings.json`), doporučená rozšíření (`extensions.json`), pravidla pro ignorování souborů při nahrávání (`.ignoreCopy`) a nahrávací/ovládací skripty:
-  - **Instalační skripty prostředí:**
-    - `setup-MicroPython.bat` / `setup-MicroPython.ps1` – jednorázová příprava prostředí pro MicroPython (kontrola Pythonu, instalace `mpremote`, rozšíření `micropython-panel` a doporučených rozšíření z Marketplace)
-    - `setup-CircuitPython.bat` / `setup-CircuitPython.ps1` – jednorázová příprava prostředí pro CircuitPython (instalace CircuitPython rozšíření z Marketplace, kontrola USB disku CIRCUITPY)
   - **CircuitPython podpora:**
     - `copy.ps1` – automatické nahrávání při uložení pro Windows (autor Jan Chaloupek)
     - `copy.sh` – automatické nahrávání pro macOS a Linux (autor Robin Bortlík, úprava Jan Chaloupek)
   - **MicroPython podpora:**
-    - `setup.bat` / `setup.ps1` – jednorázová příprava prostředí (kontrola Pythonu, instalace `mpremote` a rozšíření `micropython-panel`)
     - `upload.ps1` / `upload_main.ps1` – nahrání projektu na desku přes `mpremote` podle `upload_config.txt`
     - `repl.ps1` – otevření interaktivní konzole MicroPython REPL
     - `list.ps1` – výpis souborů uložených na desce
