@@ -146,20 +146,24 @@ Write-Host "--------------------------------------"
 # ------------------------------------------------------------
 # 6) Hromadne instalace rozsireni z Marketplace
 # ------------------------------------------------------------
-Write-Host "[6/7] Instalace spolecnych rozsireni z Marketplace..." @ColorInfo
+Write-Host "[6/8] Instalace spolecnych rozsireni z Marketplace..." @ColorInfo
 
 $allExtensions = @(
     @{ Id = "ms-python.python";                            Name = "Python (jazykova podpora)" },
     @{ Id = "ms-python.vscode-pylance";                   Name = "Pylance (analyza kodu a naseptavani)" },
-    @{ Id = "wmerkens.vscode-circuitpython-v2-cursor-ai";  Name = "CircuitPython podpora" },
+    @{ Id = "wmerkens.vscode-circuitpython-v2-cursor-ai";  Name = "CircuitPython podpora (0.3.3)" },
+    @{ Id = "emeraldwalk.runonsave";                       Name = "Run on Save (automaticke nahravani)" },
     @{ Id = "streetsidesoftware.code-spell-checker";       Name = "Code Spell Checker" },
     @{ Id = "streetsidesoftware.code-spell-checker-czech"; Name = "Czech - Code Spell Checker" },
     @{ Id = "oderwat.indent-rainbow";                      Name = "Indent Rainbow (barevne odsazeni)" },
-    @{ Id = "ms-vscode.powershell";                        Name = "PowerShell podpora" }
+    @{ Id = "ms-vscode.powershell";                        Name = "PowerShell podpora" },
+    @{ Id = "jebbs.plantuml";                              Name = "PlantUML (diagramy trid robota)" },
+    @{ Id = "IBM.output-colorizer";                        Name = "Output Colorizer (barevne logy)" },
+    @{ Id = "eugenejeon.codesnap-plus-fix";                Name = "CodeSnap-plus-fix (snimky kodu pro PR)" }
 )
 
 foreach ($ext in $allExtensions) {
-    Write-Host "  -> Instaluji $($ext.Name) [$($ext.Id)] ... " -NoNewline
+    Write-Host "  -> Instaluji $($ext.Name) ... " -NoNewline
     & $codeCmd --install-extension $ext.Id --force | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK]" @ColorDone
@@ -170,9 +174,42 @@ foreach ($ext in $allExtensions) {
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 7) Detekce pripojeneho hardware
+# 7) Kontrola a nastaveni automatickeho nahravani (Run on Save)
 # ------------------------------------------------------------
-Write-Host "[7/7] Kontrola pripojeni vyvojove desky..." @ColorInfo
+Write-Host "[7/8] Kontrola automatickeho nahravani (Run on Save)..." @ColorInfo
+
+$settingsFile = Join-Path $PSScriptRoot "settings.json"
+if (Test-Path $settingsFile) {
+    $rawSettings = Get-Content $settingsFile -Raw
+    if ($rawSettings -match "emeraldwalk\.runonsave") {
+        Write-Host "  -> Run on Save je spravne nakonfigurovan v settings.json." @ColorDone
+    } else {
+        Write-Host "  -> Doplnuji konfiguraci Run on Save pro Windows..." @ColorInfo
+        try {
+            $jsonObj = $rawSettings | ConvertFrom-Json
+            $runOnSaveCmd = @{
+                commands = @(
+                    @{
+                        match   = ".*\.py"
+                        isAsync = $true
+                        cmd     = "powershell -ExecutionPolicy Bypass -NoProfile -File `"`${workspaceFolder}\.vscode\copy.ps1`" `"`${workspaceFolder}`" `"`${relativeFile}`" `".vscode\.ignoreCopy`""
+                    }
+                )
+            }
+            $jsonObj | Add-Member -NotePropertyName "emeraldwalk.runonsave" -NotePropertyValue $runOnSaveCmd -Force
+            $jsonObj | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+            Write-Host "  -> Konfigurace Run on Save byla uspesne zapsana." @ColorDone
+        } catch {
+            Write-Host "  -> Upozorneni: Nepodarilo se automaticky zapsat do settings.json ($($_.Exception.Message))" @ColorError
+        }
+    }
+}
+Write-Host "--------------------------------------"
+
+# ------------------------------------------------------------
+# 8) Detekce pripojeneho hardware
+# ------------------------------------------------------------
+Write-Host "[8/8] Kontrola pripojeni vyvojove desky..." @ColorInfo
 
 $hwFound = $false
 

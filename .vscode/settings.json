@@ -7,33 +7,82 @@
     "python.analysis.stubPath": "_stubs",
     "python.analysis.extraPaths": [
         "./lib",
-        "./_stubs"
+        "./_stubs",
+        "./_fake"
     ],
     "circuitpython.board.version": null,
     "circuitpython.board.vid": "0x2E8A",
     "circuitpython.board.pid": "0x1026",
+
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": ".*\\.py",
+                "isAsync": true,
+                "cmd": "powershell -ExecutionPolicy Bypass -NoProfile -File \"${workspaceFolder}\\.vscode\\copy.ps1\" \"${workspaceFolder}\" \"${relativeFile}\" \".vscode\\.ignoreCopy\""
+            }
+        ]
+    },
+
+    "cSpell.language": "cs,en",
+    "cSpell.enabledFileTypes": [
+        "python",
+        "plaintext",
+        "markdown"
+    ],
+    "cSpell.words": [
+        "picoed",
+        "soubor",
+        "typový",
+        "určený",
+        "Slouží",
+        "doplňování",
+        "sběrnici",
+        "mikrokontroleru",
+        "převodník",
+        "časovače",
+        "paměti",
+        "vstupy",
+        "výstupy",
+        "modulace",
+        "sériová",
+        "komunikace",
+        "reset",
+        "frekvence",
+        "vlákna",
+        "stavové",
+        "stroje",
+        "PIO",
+        "RP2040"
+    ],
+    "cSpell.ignorePaths": [
+        "**/*.pyi"
+    ],
+    "spellright.ignoreRegExpList": [
+        ".*\\.pyi$"
+    ],
 
     "actionButtons": {
         "defaultColor": "#ffffff",
         "loadNpmCommands": false,
         "commands": [
             {
-                "name": "⬆ Upload project (MicroPython)",
+                "name": "⬆ Upload project",
                 "command": "powershell -ExecutionPolicy Bypass -File .vscode/upload.ps1",
                 "color": "yellow"
             },
             {
-                "name": "▶ REPL (MicroPython)",
+                "name": "▶ REPL",
                 "command": "powershell -ExecutionPolicy Bypass -File .vscode/repl.ps1",
                 "color": "lightgreen"
             },
             {
-                "name": "📂 List files (MicroPython)",
+                "name": "📂 List files",
                 "command": "powershell -ExecutionPolicy Bypass -File .vscode/list.ps1",
                 "color": "lightblue"
             },
             {
-                "name": "🗑 Wipe device (MicroPython)",
+                "name": "🗑 Wipe device",
                 "command": "powershell -ExecutionPolicy Bypass -File .vscode/wipe.ps1",
                 "color": "red"
             }

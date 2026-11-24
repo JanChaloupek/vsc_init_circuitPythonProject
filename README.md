@@ -4,15 +4,18 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 
 ### Obsah projektu:
 - **`setup.bat`** / **`.vscode/setup.bat`** – **Jednorázová kompletní příprava prostředí pro studenty** (spustí `.vscode/setup.ps1`):
-  - automatická kontrola/instalace Pythonu a pipu
+  - automatická kontrola a instalace Pythonu i pipu
   - instalace nástroje `mpremote` pro MicroPython
-  - instalace vestavěného rozšíření `micropython-panel.vsix`
-  - hromadná instalace rozšíření z Marketplace (Python, Pylance, CircuitPython, Spell Checker, Indent Rainbow)
+  - instalace vestavěného rozšíření `micropython-panel.vsix` (v0.2.2)
+  - hromadná instalace rozšíření z Marketplace (Python, Pylance, CircuitPython 0.3.3, Run on Save, Spell Checker s češtinou, Indent Rainbow, PlantUML, Output Colorizer, CodeSnap)
+  - automatická konfigurace `Run on Save` pro okamžité nahrávání na desku při stisku `Ctrl+S`
   - automatická detekce připojené desky (USB disk CIRCUITPY i COM porty)
 - **`.vscode/`** – Konfigurace editoru (`settings.json`), doporučená rozšíření (`extensions.json`), pravidla pro ignorování souborů při nahrávání (`.ignoreCopy`) a nahrávací/ovládací skripty:
   - **CircuitPython podpora:**
     - `copy.ps1` – automatické nahrávání při uložení pro Windows (autor Jan Chaloupek)
     - `copy.sh` – automatické nahrávání pro macOS a Linux (autor Robin Bortlík, úprava Jan Chaloupek)
+    - `comStop.py` – bezpečné odeslání STOP signálu (Ctrl+C) na sériový port před nahráváním
+    - `ploter.py` – sériový plotter pro vykreslování senzorických dat v reálném čase
   - **MicroPython podpora:**
     - `upload.ps1` / `upload_main.ps1` – nahrání projektu na desku přes `mpremote` podle `upload_config.txt`
     - `repl.ps1` – otevření interaktivní konzole MicroPython REPL
@@ -20,11 +23,11 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
     - `wipe.ps1` – bezpečné vymazání souborů z desky
     - `mpy.ps1` / `mpy.cmd` – rychlý CLI launcher pro příkazy MicroPythonu
     - `dist/micropython-panel.vsix` – vestavěné rozšíření pro VS Code s tlačítky v Activity Baru i Status Baru
-- **`_stubs/`** – Typové stuby pro nápovědu (IntelliSense) a offline testy na PC:
-  - CircuitPython: `board`, `busio`, `digitalio`, `picoed`, `neopixel`, `pwmio`, `analogio`, `adafruit_ticks`, `time`
-  - MicroPython: `machine`, `rp2`
+- **`_fake/`** – Mock moduly (`board`, `picoed`, `pwmio`, `digitalio`, `neopixel`, `time` atd.) umožňující spouštět a testovat kód offline přímo na PC bez připojeného robota.
+- **`_stubs/`** – Typové stuby pro nápovědu (IntelliSense) ve VS Code.
 - **`lib/`** – Složka pro knihovny hardware:
   - `picoed_v2_lib/` – oficiální MicroPython knihovna pro Pico:ed v2 (displej IS31FL3731, tlačítka, neopixel LED, bzučák, ultrazvukový senzor)
 - **`pyrightconfig.json`** – Konfigurace analyzátoru Pylance/Pyright pro okamžitou nápovědu bez falešných chybových hlášení.
 - **`code.py`** – Výchozí spouštěný program pro CircuitPython (blikání vestavěné LED).
+- **`main.py`** – Výchozí spouštěný program pro MicroPython.
 - **`.gitignore`** – Vyloučení dočasných a systémových souborů z verzování.
