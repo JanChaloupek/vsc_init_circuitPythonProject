@@ -9,12 +9,15 @@
 #     2) Virtualni prostredi .venv v koreni projektu
 #     3) Instalace Python knihoven do .venv: mpremote (MicroPython,
 #        obsahuje i pyserial) a matplotlib (graf: mpy plot / cpy plot)
-#     4) Detekce VS Code CLI
-#     5) Instalace rozsireni MicroPython & CircuitPython Panel (.vsix)
-#     6) Hromadna instalace rozsireni z Marketplace (obe platformy)
-#     7) Nastaveni panelu a Run on Save v settings.json
+#     4) Nastaveni panelu a Run on Save v settings.json
 #        (zapisuje je .vscode/deska.py vscode - tlacitka jsou
-#        definovana jen tam, stejne pro Windows i Linux/macOS)
+#        definovana jen tam, stejne pro Windows i Linux/macOS).
+#        Jde PRED instalaci rozsireni: panel si pri prvnim
+#        spusteni precte uz hotova tlacitka, okno neni potreba
+#        znovu nacitat. Nastaveni nepotrebuje VS Code CLI.
+#     5) Detekce VS Code CLI
+#     6) Instalace rozsireni MicroPython & CircuitPython Panel (.vsix)
+#     7) Hromadna instalace rozsireni z Marketplace (obe platformy)
 #     8) Kontrola pripojenych desek (.vscode/deska.py devices)
 #
 # Knihovny jdou do .venv (jen pro tento projekt), systemovy Python
@@ -26,7 +29,7 @@
 # musi umet nainstalovat i samotny Python.
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "3.3"
+$ScriptVersion = "3.4"
 $ScriptDate    = "2026-11-26"
 
 # Python, ktery se nainstaluje, kdyz na pocitaci zadny neni.
@@ -195,9 +198,22 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 4) Detekce VS Code CLI
+# 4) Kontrola a nastaveni settings.json pro Windows
 # ------------------------------------------------------------
-Write-Host "[4/8] Detekce rozhrani VS Code CLI..." @ColorInfo
+Write-Host "[4/8] Nastaveni panelu a Run on Save (settings.json)..." @ColorInfo
+
+# Tlacitka panelu i Run on Save jsou definovana v deska.py (PANEL_BUTTONS),
+# aby byla stejna pro Windows i Linux/macOS.
+& $Py $DeskaPy vscode
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  -> Upozorneni: settings.json se nepodarilo nastavit." @ColorError
+}
+Write-Host "--------------------------------------"
+
+# ------------------------------------------------------------
+# 5) Detekce VS Code CLI
+# ------------------------------------------------------------
+Write-Host "[5/8] Detekce rozhrani VS Code CLI..." @ColorInfo
 
 $possiblePaths = @(
     "$env:LOCALAPPDATA\Programs\Microsoft VS Code\bin\code.cmd",
@@ -224,8 +240,9 @@ if (-not $codeCmd) {
 }
 
 if (-not $codeCmd) {
-    Write-Host "VS Code CLI nenalezen. Preskakuji automatickou instalaci rozsireni." @ColorError
-    exit 1
+    # Nastaveni (krok 4) uz je hotove, desky (krok 8) zkontrolujeme i tak.
+    Write-Host "VS Code CLI nenalezen. Preskakuji instalaci rozsireni (kroky 6 a 7)." @ColorError
+    Write-Host "  Nainstalujte VS Code z https://code.visualstudio.com a spustte setup.bat znovu." @ColorError
 } else {
     Write-Host "VS Code CLI nalezen: $codeCmd" @ColorDone
 }
@@ -257,18 +274,20 @@ for ($i = 0; $i -lt 3 -and $markerDir; $i++) {
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 5) Instalace MicroPython & CircuitPython Panelu
+# 6) Instalace MicroPython & CircuitPython Panelu
 # ------------------------------------------------------------
-Write-Host "[5/8] Instalace rozsireni MicroPython & CircuitPython Panel..." @ColorInfo
+Write-Host "[6/8] Instalace rozsireni MicroPython & CircuitPython Panel..." @ColorInfo
 
 # Prikaz "code" bezi na Node.js a pri instalaci rozsireni vypisuje varovani
 # "DeprecationWarning: url.parse()". Neni to chyba, jen by studenta zbytecne
-# vystrasilo - promenna NODE_NO_WARNINGS ho skryje (plati jen pro kroky 5 a 6).
+# vystrasilo - promenna NODE_NO_WARNINGS ho skryje (plati jen pro kroky 6 a 7).
 $oldNodeNoWarnings = $env:NODE_NO_WARNINGS
 $env:NODE_NO_WARNINGS = "1"
 
 $vsix = Join-Path $PSScriptRoot "dist\micropython-panel.vsix"
-if (Test-Path $vsix) {
+if (-not $codeCmd) {
+    Write-Host "Preskoceno (VS Code CLI nenalezen)." @ColorError
+} elseif (Test-Path $vsix) {
     & $codeCmd @CodeExtArgs --install-extension $vsix --force
     if ($LASTEXITCODE -eq 0) {
         Write-Host "MicroPython & CircuitPython Panel uspesne nainstalovan/aktualizovan." @ColorDone
@@ -281,9 +300,9 @@ if (Test-Path $vsix) {
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
-# 6) Hromadne instalace rozsireni z Marketplace
+# 7) Hromadne instalace rozsireni z Marketplace
 # ------------------------------------------------------------
-Write-Host "[6/8] Instalace spolecnych rozsireni z Marketplace..." @ColorInfo
+Write-Host "[7/8] Instalace spolecnych rozsireni z Marketplace..." @ColorInfo
 
 $allExtensions = @(
     @{ Id = "ms-python.python";                            Name = "Python (jazykova podpora)" },
@@ -299,6 +318,10 @@ $allExtensions = @(
     @{ Id = "eugenejeon.codesnap-plus-fix";                Name = "CodeSnap-plus-fix (snimky kodu pro PR)" }
 )
 
+if (-not $codeCmd) {
+    Write-Host "Preskoceno (VS Code CLI nenalezen)." @ColorError
+    $allExtensions = @()
+}
 foreach ($ext in $allExtensions) {
     Write-Host "  -> Instaluji $($ext.Name) ... " -NoNewline
     & $codeCmd @CodeExtArgs --install-extension $ext.Id --force | Out-Null
@@ -309,19 +332,6 @@ foreach ($ext in $allExtensions) {
     }
 }
 $env:NODE_NO_WARNINGS = $oldNodeNoWarnings
-Write-Host "--------------------------------------"
-
-# ------------------------------------------------------------
-# 7) Kontrola a nastaveni settings.json pro Windows
-# ------------------------------------------------------------
-Write-Host "[7/8] Nastaveni panelu a Run on Save (settings.json)..." @ColorInfo
-
-# Tlacitka panelu i Run on Save jsou definovana v deska.py (PANEL_BUTTONS),
-# aby byla stejna pro Windows i Linux/macOS.
-& $Py $DeskaPy vscode
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "  -> Upozorneni: settings.json se nepodarilo nastavit." @ColorError
-}
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
@@ -338,10 +348,18 @@ Write-Host "[8/8] Kontrola pripojenych desek..." @ColorInfo
 & python -c "import sys" >$null 2>&1
 $pythonCmdOk = ($LASTEXITCODE -eq 0)
 
-Write-Host "============================================================" @ColorDone
-Write-Host "  Instalace je KOMPLETNI! Prostredi je pripraveno." @ColorDone
-Write-Host "  Muzete pracovat s MicroPythonem i CircuitPythonem." @ColorDone
-Write-Host "============================================================" @ColorDone
+if ($codeCmd) {
+    Write-Host "============================================================" @ColorDone
+    Write-Host "  Instalace je KOMPLETNI! Prostredi je pripraveno." @ColorDone
+    Write-Host "  Muzete pracovat s MicroPythonem i CircuitPythonem." @ColorDone
+    Write-Host "============================================================" @ColorDone
+} else {
+    Write-Host "============================================================" @ColorError
+    Write-Host "  Instalace NENI kompletni: chybi rozsireni VS Code." @ColorError
+    Write-Host "  Python, knihovny a nastaveni jsou pripravene. Nainstalujte" @ColorError
+    Write-Host "  VS Code (https://code.visualstudio.com) a spustte setup.bat znovu." @ColorError
+    Write-Host "============================================================" @ColorError
+}
 if ($PythonInstalled -or -not $pythonCmdOk) {
     Write-Host ""
     Write-Host "DULEZITE: Zavrete VS Code a otevrete ho znovu." @ColorFile

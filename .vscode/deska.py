@@ -1092,6 +1092,7 @@ def cmd_vscode(opts):
         data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8-sig")) if SETTINGS_FILE.exists() else {}
     except ValueError as e:
         raise CpyError(f"{SETTINGS_FILE} neni platny JSON: {e}")
+    before = json.dumps(data, sort_keys=True)
     data["emeraldwalk.runonsave"] = {"commands": [{
         "match": RUN_ON_SAVE_MATCH,
         "isAsync": True,
@@ -1111,13 +1112,22 @@ def cmd_vscode(opts):
     # Panel si sam (kdyz je videt) zjistuje pripojene desky timto prikazem.
     data["micropython.devicesCommand"] = f"{py} .vscode/deska.py devices --json"
     data.setdefault("micropython.enableStatusToolbar", True)
-    SETTINGS_FILE.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
-    say(f"Nastaveni zapsano: {SETTINGS_FILE}", "done")
+    # Na Windows uz settings.json z gitu obsahuje presne tohle (prikazy "python"),
+    # takze se nic nemeni a okno neni potreba znovu nacitat. Na Linuxu/macOS se
+    # prepise "python" na "python3" - panel pak sam nabidne "Prenacist okno".
+    changed = json.dumps(data, sort_keys=True) != before
+    if changed:
+        SETTINGS_FILE.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+        say(f"Nastaveni zapsano: {SETTINGS_FILE}", "done")
+    else:
+        say(f"Nastaveni uz je aktualni: {SETTINGS_FILE}", "done")
     say(f"   Run on Save: soubory {RUN_ON_SAVE_MATCH} -> cpy save (podle .ignoreCopy)")
     say(f"   Panel: bloky MicroPython a CircuitPython, {len(buttons)} tlacitek, z toho "
         f"{sum(1 for b in PANEL_BUTTONS if b[6])} ve stavovem radku ({py} .vscode/deska.py ...)")
     say("   Bloky ukazuji pripojene desky (devices --json).")
-    say("   Ve VS Code: F1 -> 'Developer: Reload Window', aby se tlacitka nacetla.")
+    if changed:
+        say("   Tlacitka se zmenila. Pokud uz je panel nainstalovany, nabidne 'Prenacist okno'")
+        say("   (nebo F1 -> 'Developer: Reload Window'). Panel nainstalovany az potom je nacte sam.")
 
 
 def parse_values(text):

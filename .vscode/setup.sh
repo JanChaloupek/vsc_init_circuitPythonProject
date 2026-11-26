@@ -9,12 +9,15 @@
 #     2) Virtualni prostredi .venv v koreni projektu
 #     3) Instalace Python knihoven do .venv: mpremote (MicroPython,
 #        obsahuje i pyserial) a matplotlib (graf: mpy plot / cpy plot)
-#     4) Detekce VS Code CLI
-#     5) Instalace rozsireni MicroPython & CircuitPython Panel (.vsix)
-#     6) Hromadna instalace rozsireni z Marketplace
-#     7) Nastaveni panelu a Run on Save v settings.json
+#     4) Nastaveni panelu a Run on Save v settings.json
 #        (zapisuje je .vscode/deska.py vscode - tlacitka jsou
-#        definovana jen tam, stejne pro Windows i Linux/macOS)
+#        definovana jen tam, stejne pro Windows i Linux/macOS).
+#        Jde PRED instalaci rozsireni: panel si pri prvnim
+#        spusteni precte uz prepsana tlacitka (python3), okno
+#        neni potreba znovu nacitat.
+#     5) Detekce VS Code CLI
+#     6) Instalace rozsireni MicroPython & CircuitPython Panel (.vsix)
+#     7) Hromadna instalace rozsireni z Marketplace
 #     8) Kontrola pripojenych desek (.vscode/deska.py devices)
 #
 # Knihovny jdou do .venv (jen pro tento projekt). Novejsi Linuxy
@@ -28,7 +31,7 @@
 # umet zkontrolovat i samotny Python.
 # ------------------------------------------------------------
 SCRIPT_NAME="setup.sh"
-SCRIPT_VERSION="3.3"
+SCRIPT_VERSION="3.4"
 SCRIPT_DATE="2026-11-26"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -121,9 +124,21 @@ fi
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 4) Detekce VS Code CLI
+# 4) Nastaveni settings.json pro Linux / macOS
 # ------------------------------------------------------------
-echo "[4/8] Detekce rozhrani VS Code CLI..."
+echo "[4/8] Nastaveni panelu a Run on Save (settings.json)..."
+
+# Tlacitka panelu i Run on Save jsou definovana v deska.py (PANEL_BUTTONS),
+# aby byla stejna pro Windows i Linux/macOS.
+if ! $PY "$DESKA_PY" vscode; then
+    echo "  -> Upozorneni: settings.json se nepodarilo nastavit."
+fi
+echo "--------------------------------------"
+
+# ------------------------------------------------------------
+# 5) Detekce VS Code CLI
+# ------------------------------------------------------------
+echo "[5/8] Detekce rozhrani VS Code CLI..."
 CODE_CMD=""
 if command -v code &>/dev/null; then
     CODE_CMD="code"
@@ -143,9 +158,9 @@ fi
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 5) Instalace MicroPython & CircuitPython Panelu (.vsix)
+# 6) Instalace MicroPython & CircuitPython Panelu (.vsix)
 # ------------------------------------------------------------
-echo "[5/8] Instalace rozsireni MicroPython & CircuitPython Panel..."
+echo "[6/8] Instalace rozsireni MicroPython & CircuitPython Panel..."
 # Prikaz "code" bezi na Node.js a pri instalaci rozsireni vypisuje varovani
 # "DeprecationWarning: url.parse()". Neni to chyba, jen by studenta zbytecne
 # vystrasilo - promenna NODE_NO_WARNINGS ho skryje.
@@ -166,9 +181,9 @@ fi
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 6) Hromadne instalace rozsireni z Marketplace
+# 7) Hromadne instalace rozsireni z Marketplace
 # ------------------------------------------------------------
-echo "[6/8] Instalace spolecnych rozsireni z Marketplace..."
+echo "[7/8] Instalace spolecnych rozsireni z Marketplace..."
 EXTENSIONS=(
     "ms-python.python"
     "ms-python.vscode-pylance"
@@ -197,18 +212,6 @@ fi
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 7) Nastaveni settings.json pro Linux / macOS
-# ------------------------------------------------------------
-echo "[7/8] Nastaveni panelu a Run on Save (settings.json)..."
-
-# Tlacitka panelu i Run on Save jsou definovana v deska.py (PANEL_BUTTONS),
-# aby byla stejna pro Windows i Linux/macOS.
-if ! $PY "$DESKA_PY" vscode; then
-    echo "  -> Upozorneni: settings.json se nepodarilo nastavit."
-fi
-echo "--------------------------------------"
-
-# ------------------------------------------------------------
 # 8) Detekce pripojeneho hardware
 # ------------------------------------------------------------
 echo "[8/8] Kontrola pripojenych desek..."
@@ -218,6 +221,13 @@ echo "[8/8] Kontrola pripojenych desek..."
 $PY "$DESKA_PY" devices
 
 echo "============================================================"
-echo "  Instalace je KOMPLETNI! Prostredi je pripraveno."
-echo "  Muzete pracovat s MicroPythonem i CircuitPythonem."
+if [ -n "$CODE_CMD" ]; then
+    echo "  Instalace je KOMPLETNI! Prostredi je pripraveno."
+    echo "  Muzete pracovat s MicroPythonem i CircuitPythonem."
+else
+    echo "  Instalace NENI kompletni: chybi rozsireni VS Code."
+    echo "  Python, knihovny a nastaveni jsou pripravene. Ve VS Code stisknete"
+    echo "  F1 -> 'Shell Command: Install code command in PATH' a spustte"
+    echo "  ./setup.sh znovu."
+fi
 echo "============================================================"
