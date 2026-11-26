@@ -48,7 +48,7 @@ except (ImportError, AttributeError):
 if __name__ == "__main__":
     print(f"Spusteno code.py (CircuitPython na {board_name})")
 
-    # Pokud je dostupny displej Pico:ed, zarolujeme uvodni text
+    # Pokud je dostupny displej Pico:ed, nechame po nem projet uvodni text
     if display:
         try:
             display.scroll("ZSaPR")
