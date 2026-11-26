@@ -299,7 +299,7 @@ Ukázkový test je v `pc/tests/test_code_py.py`; nové testy přidávejte do ste
 
 Totéž pro MicroPython (`main.py`) dělají `.\mpy sim` a `.\mpy test` (testy v `pc/tests_mpy`) – viz `docs/MicroPython.md`, kapitola 8.
 
-Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
+Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
 
 ---
 

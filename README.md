@@ -51,6 +51,7 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
 | **`cpy.cmd`** / **`cpy.sh`** | spouštěč nástroje **`cpy`** pro CircuitPython |
+| **`pyrightconfig.json`** | nastavení nápovědy Pylance: kde hledat knihovny (`lib/`) a typové stuby (`pc/_stubs`) |
 | **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` (CircuitPython) a `pc/tests_mpy` (MicroPython) a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
 | **`.gitignore`** | co se neukládá do gitu |
 | **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |

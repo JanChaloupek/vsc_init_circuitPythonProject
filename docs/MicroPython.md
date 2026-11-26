@@ -308,7 +308,7 @@ Pro testy má falešný `machine` pomocné funkce (na desce nejsou): `machine.hi
 
 Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, SPI a NeoPixel.
 
-- Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
+- Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
 
 ---
 

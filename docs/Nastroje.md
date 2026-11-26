@@ -213,7 +213,13 @@ Panel je záměrně **rychlý přístup k základním akcím** (nahrát, spustit
 2. Spusťte `python .vscode/deska.py vscode`.
 3. VS Code nabídne **Přenačíst okno** (nebo `F1` → `Developer: Reload Window`).
 
-Ostatní položky v `settings.json` (nápověda Pylance, kontrola pravopisu, ...) příkaz `vscode` nemění.
+Ostatní položky v `settings.json` (kontrola pravopisu, ...) příkaz `vscode` nemění.
+
+### Nápověda Pylance: `pyrightconfig.json`
+
+Kde Pylance hledá moduly, je v souboru **`pyrightconfig.json`** v kořeni projektu (`extraPaths`: `lib`, `pc/_stubs`, `pc`; `stubPath`: `pc/_stubs`; vypnuté hlášení `reportMissingModuleSource`). V `settings.json` to být nemůže, protože rozšíření CircuitPython (`wmerkens.vscode-circuitpython-v2-cursor-ai`) při každém otevření projektu a po výběru desky přepíše `python.analysis.extraPaths`: na první dvě místa dá absolutní cesty do svého adresáře v profilu uživatele a naše `./lib` tím zmizí. Když `pyrightconfig.json` existuje, Pylance nastavení `python.analysis.*` ze `settings.json` ignoruje, takže přepsání nápovědě nevadí.
+
+Rozšíření do `settings.json` zapisuje dál – při každé aktivaci `python.languageServer` a `python.analysis.diagnosticSeverityOverrides` (ty jsou v souboru už předem, aby se nic neměnilo), po výběru desky `circuitpython.board.*` a `python.analysis.extraPaths`. **Řádek `python.analysis.extraPaths` s cestami do profilu necommitujte** – patří jen na váš počítač.
 
 ---
 

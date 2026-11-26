@@ -1,0 +1,10 @@
+{
+    "stubPath": "pc/_stubs",
+    "extraPaths": [
+        "lib",
+        "pc/_stubs",
+        "pc"
+    ],
+    "typeCheckingMode": "off",
+    "reportMissingModuleSource": "none"
+}

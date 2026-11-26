@@ -4,12 +4,6 @@
         "reportMissingModuleSource": "none",
         "reportShadowedImports": "none"
     },
-    "python.analysis.stubPath": "pc/_stubs",
-    "python.analysis.extraPaths": [
-        "./lib",
-        "./pc/_stubs",
-        "./pc"
-    ],
     "python.terminal.activateEnvironment": false,
     "python-envs.terminal.autoActivationType": "off",
     "circuitpython.board.version": null,
