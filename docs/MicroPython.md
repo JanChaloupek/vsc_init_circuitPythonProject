@@ -155,7 +155,7 @@ Pro rychlé ladění a skriptování je v terminálu VS Code (`Ctrl+~`) k dispoz
 - **Linux a macOS:** `./mpy.sh <příkaz>`
 - **Kdekoliv:** `python .vscode/deska.py mpy <příkaz>` (takhle příkazy volá panel)
 
-Deska se najde sama. Když je jich připojeno víc, vyberete ji volbou `--port COMx`.
+Deska se najde sama. Když je jich připojeno víc, vyberete ji natrvalo příkazem `mpy select` (bez parametru nabídne seznam) nebo kliknutím v panelu; jen pro jeden příkaz volbou `--port COMx`.
 
 **Podrobný výpis:** příkazy, které spouštějí tlačítka panelu (`upload`, `main`, `reset`, `repl`, `wipe`), vypisují očíslované kroky – co se nahrává, která deska a jestli odpovídá, co dělá `mpremote`, kolik souborů se nahrálo a kolik bylo beze změny, první výstup programu po spuštění. Když se něco nepovede, poslední řádek řekne, ve kterém kroku a co s tím:
 
@@ -207,6 +207,9 @@ mpy plot
 
 # 11. Jaké desky jsou připojené (MicroPython i CircuitPython)
 mpy devices
+
+# 12. Výběr desky, když je připojeno víc desek (COM4, nebo auto = zrušit)
+mpy select
 ```
 
 > [!IMPORTANT]

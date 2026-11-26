@@ -45,11 +45,11 @@ Soubor `deska.py` je rozdělený na oddíly (v kódu hledejte `ODDIL`):
 |---|---|
 | 1 | nastavení, tabulka desek podle VID:PID |
 | 2 | výpis na obrazovku (barvy, hlášky, potvrzování) |
-| 3 | hledání desek: USB disky a sériové porty |
+| 3 | hledání desek: USB disky a sériové porty, uložený výběr desky (`select`) |
 | 4 | sériová konzole desky – REPL a raw REPL |
 | 5 | soubory projektu (`.ignoreCopy`), BOM, stromový výpis |
 | 6 | společné příkazy: `devices`, `vscode`, graf |
-| 7 | CircuitPython – příkazy `cpy` |
+| 7 | CircuitPython – příkazy `cpy`; na konci simulace a testy na PC pro obě platformy (`pc_hardware`, `pc_sim`, `pc_test`) |
 | 8 | MicroPython – příkazy `mpy` |
 | 9 | nápověda, čtení parametrů, hlavní funkce |
 
@@ -70,7 +70,19 @@ MicroPython  (prikazy mpy)
 
 **Deska s MicroPythonem** má jen sériový port. Najde se podle VID:PID.
 
-Když je připojeno víc desek stejného druhu, vyberete jednu volbou `--port COMx` (a u CircuitPythonu `--drive F:`).
+### Víc desek stejného druhu
+
+Bez dalšího nastavení se použije první nalezená deska. Jinou vyberete třemi způsoby:
+
+| Jak | Příklad | Platí |
+|---|---|---|
+| příkaz `select` | `mpy select COM4`, `cpy select F:` nebo `cpy select COM5`; bez parametru nabídne očíslovaný seznam | natrvalo, dokud nenapíšete `select auto` |
+| kliknutí na desku v panelu | panel na pozadí zavolá `deska.py mpy select COM4` / `cpy select COM5` | natrvalo; dalším kliknutím na vybranou desku se volba zruší |
+| volba příkazu | `--port COMx`, u CircuitPythonu i `--drive F:` | jen pro tento příkaz, má přednost před uloženým výběrem |
+
+Uložená volba je v souboru `.vscode/.active_device.json` (je v `.gitignore` – každý počítač má svou). U CircuitPythonu stačí uložit disk, nebo port: druhou část `cpy` dohledá podle UID (panel ukládá port). Když uložená deska není připojená, použije se zase první nalezená.
+
+`devices` u ručně vybrané desky vypíše `[vybrana rucne]`, a když je desek víc, u té, která se použije bez výběru, `[vychozi aktivni]`. V `devices --json` má každá deska pole `active` (s touto deskou se pracuje) a `selected` (vybraná ručně) – podle nich panel kreslí ● a ○.
 
 ---
 
@@ -186,7 +198,7 @@ Panel (rozšíření *MicroPython & CircuitPython Panel*, zdrojový kód v repoz
 | `micropython.devicesRefreshSeconds` | jak často seznam obnovovat, když je panel vidět (výchozí 5 s) |
 | `emeraldwalk.runonsave` | Run on Save: `python .vscode/deska.py cpy save "${relativeFile}"` |
 
-Každé tlačítko jen vloží text příkazu do terminálu `MicroPython`. Seznam desek rozšíření nezjišťuje samo – spouští `devicesCommand` (jen když je panel vidět) a čte jeho JSON. `deska.py devices --json` přitom sériové porty neotevírá, takže nevadí běžícímu REPL ani Serial Monitoru.
+Každé tlačítko jen vloží text příkazu do terminálu `MicroPython`. Seznam desek rozšíření nezjišťuje samo – spouští `devicesCommand` (jen když je panel vidět) a čte jeho JSON. `deska.py devices --json` přitom sériové porty neotevírá, takže nevadí běžícímu REPL ani Serial Monitoru. Když je v bloku víc desek, jsou klikací. Kliknutí nejde do terminálu: panel spustí `deska.py mpy|cpy select` na pozadí a seznam obnoví (viz [Víc desek stejného druhu](#víc-desek-stejného-druhu)).
 
 Všechna tato nastavení **zapisuje příkaz `python .vscode/deska.py vscode`** (volá ho setup). Tlačítka jsou tak definovaná na jediném místě – v seznamu `PANEL_BUTTONS` v oddílu 6 souboru `deska.py`. Rozdíl mezi systémy je jen jeden: Windows volají `python`, Linux a macOS `python3`.
 
@@ -247,7 +259,7 @@ Příkazy `cpy sim` / `mpy sim` a `cpy test` / `mpy test` (v `deska.py`, funkce 
 |---|---|---|
 | Čas | stojí; `time.sleep()` / `adafruit_ticks.advance_ticks()` ho jen posunou, před každým testem se vynuluje | běží podle skutečných hodin; `time.sleep(1)` opravdu čeká |
 | Výstup | nic | změny hardwaru vypisuje `pc/simulace/konzole.py` |
-| Vstupy | test je nastaví v kódu (`picoed.button_a.set_pressed(True)`, `machine.stiskni("a")`) | klávesy `a` / `b` (tlačítko drží 0,5 s) |
+| Vstupy | test je nastaví v kódu (`picoed.button_a.set_pressed(True)`, `machine.stiskni("a")`) | klávesy `a` / `b` (tlačítko drží 0,5 s), `q` nebo `Ctrl+C` simulaci ukončí |
 | Kontrola | test čte uložený stav (`led.state_history`, `write_history`, `music.history`, …) | člověk čte výpis |
 
 Falešné moduly samy nic nevypisují. Při každé změně jen zavolají `_rezim.oznam(co, kdo, hodnota)` – v testu nikdo neposlouchá, v simulaci posluchač z `konzole.py` změnu vypíše:
@@ -266,7 +278,7 @@ Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes 
 - MicroPython (`mpy`): `adafruit_ticks`, `utime`, `micropython`, `machine`; `utime` je zároveň `time`. Moduly standardní knihovny s „u“ (`uasyncio`, `ujson`, `ustruct`, …) jsou skutečné moduly Pythonu (`asyncio`, `json`, …).
 - Vždy se načte jen jedna sada – `time` má v MicroPythonu jiné funkce (`sleep_ms`, `ticks_ms`) než v CircuitPythonu. Proto má každá platforma svou složku testů.
 - Do cesty pro import se přidá kořen projektu (program studenta a jeho moduly), `lib/` (jako `/lib` na desce) a `pc/` (`_fake`, `tests`, `simulace`).
-- Testy tak mohou psát `import picoed`, `import _fake.adafruit_ticks as fake_ticks` i `from tests.create import ...` – stejně jako v projektu `3-SW_GIT`, jehož 115 testů projde přes `cpy test` beze změny (místo jeho `run_test.py`).
+- Testy tak mohou psát `import picoed`, `import _fake.adafruit_ticks as fake_ticks` i `from tests.create import ...` – stejně jako v projektu `3-SW_GIT`, jehož testy projdou přes `cpy test` beze změny (místo jeho `run_test.py`).
 
 ### MicroPython: falešný `machine`
 
@@ -292,7 +304,7 @@ Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes 
 |---|---|
 | CircuitPython | 9.2.7 na ELECFREAKS Pico:ed (RP2040), disk `CIRCUITPY` |
 | MicroPython | 1.27.0 na Raspberry Pi Pico (RP2040) |
-| Systém | Windows 11 (PowerShell, Git Bash) |
+| Systém | Windows 11 (PowerShell, cmd, Git Bash); Ubuntu 24.04 v Dockeru (`setup.sh`, simulace a testy na PC včetně čtení kláves) |
 | Knihovny | mpremote 1.27.0, pyserial 3.5, matplotlib 3.11 |
 
-Na Linuxu a macOS je kód napsaný a hledá disky v obvyklých místech (`/media/$USER`, `/run/media/$USER`, `/Volumes`), ale na skutečném počítači s těmito systémy zatím odzkoušený nebyl.
+Práce se skutečnou deskou na Linuxu a macOS je napsaná (disky se hledají v `/media/$USER`, `/run/media/$USER`, `/Volumes`), ale na počítači s těmito systémy a připojenou deskou zatím odzkoušená nebyla. macOS nebyl zkoušený vůbec.

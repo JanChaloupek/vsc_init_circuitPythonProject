@@ -2,7 +2,7 @@
 # ============================================================
 # deska.py - nastroj pro praci s deskami s MicroPythonem a CircuitPythonem
 #
-# Verze: 2.1 (2026-11-26)
+# Verze: 2.4 (2026-11-26)
 #
 # K CEMU TO JE
 #   Jeden soubor, ktery umi nahrat program do desky, spustit ho,
@@ -71,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.3"
+SCRIPT_VERSION = "2.4"
 SCRIPT_DATE = "2026-11-26"
 
 
@@ -97,6 +97,7 @@ BAUD = 115200                   # u USB serioveho portu na rychlosti nezalezi
 # prevzata z puvodniho utils.ps1.
 CP_DEVICES = [
     (0x2E8A, 0x1026, "ELECFREAKS Pico:ed (CircuitPython)"),
+    (0x2E8A, 0x1096, "Cytron MOTION 2350 Pro (CircuitPython)"),
 ]
 MP_DEVICES = [
     (0x2E8A, 0x000A, "ELECFREAKS Pico:ed (MicroPython)"),
@@ -529,6 +530,13 @@ class Board:
         active = load_active_target("cpy")
         if active and drives:
             matched = [d for d in drives if str(d).rstrip("\\/").lower() == str(active).rstrip("\\/").lower()]
+            if not matched:
+                # Panel uklada u CircuitPythonu port (COMx): disk k nemu
+                # najdeme podle UID z boot_out.txt (= seriove cislo portu)
+                ports = list_ports()
+                matched = [d for d in drives
+                           if any(p.device.upper() == str(active).upper()
+                                  for p in ports_for_uid(read_boot_out(d)["uid"], ports))]
             if matched:
                 self._drive = matched[0]
                 return self._drive

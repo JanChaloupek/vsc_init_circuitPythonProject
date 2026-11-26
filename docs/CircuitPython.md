@@ -211,6 +211,9 @@ cpy plot
 
 # 11. Jaké desky jsou připojené (CircuitPython i MicroPython)
 cpy devices
+
+# 12. Výběr desky, když je připojeno víc desek (F:, COM5, nebo auto = zrušit)
+cpy select
 ```
 
 ### B) Příkazy jen pro CircuitPython
@@ -226,7 +229,7 @@ cpy devices
 | `cpy flash <soubor.uf2>` | nahraje firmware do desky |
 
 Volby:
-- `--port COMx` a `--drive F:` – když je připojeno víc desek (jinak se najdou samy),
+- `--port COMx` a `--drive F:` – když je připojeno víc desek (jinak se najdou samy); natrvalo desku vyberete příkazem `cpy select` nebo kliknutím v panelu,
 - `-y` / `--yes` – bez potvrzovací otázky (pro `wipe`, `setup`, `flash`),
 - `--watch` – u `upload`, `main`, `wipe`, `setup`: po zápisu poslouchá sériový port (nic do něj neposílá) a ukáže, jestli se program spustil a co vypsal. Vyžaduje odpojený Serial Monitor.
 - `--stop` – u `upload`, `main`, `wipe`, `setup`: program se před zápisem přes sériový port zastaví a pak jednou spustí. Hodí se, když nahráváte hodně souborů nebo velké knihovny, nebo když program vypnul autoreload.

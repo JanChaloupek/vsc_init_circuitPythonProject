@@ -6,8 +6,8 @@
     },
     "python.analysis.stubPath": "pc/_stubs",
     "python.analysis.extraPaths": [
-        "./lib",
-        "./pc/_stubs",
+        "c:\\Users\\honza\\.vscode\\extensions\\wmerkens.vscode-circuitpython-v2-cursor-ai-0.3.3\\boards\\0x2E8A\\0x1026",
+        "c:\\Users\\honza\\.vscode\\extensions\\wmerkens.vscode-circuitpython-v2-cursor-ai-0.3.3\\stubs",
         "./pc"
     ],
     "python.terminal.activateEnvironment": false,
@@ -144,7 +144,11 @@
         "Debianu",
         "pacman",
         "noconfirm",
-        "PKGS"
+        "PKGS",
+        "rucne",
+        "vybrana",
+        "vychozi",
+        "aktivni"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"
