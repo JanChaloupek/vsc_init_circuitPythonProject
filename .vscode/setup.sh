@@ -5,8 +5,10 @@
 # Ucel:
 #   Kompletni jednorazova priprava vyvojoveho prostredi
 #   pro MicroPython i CircuitPython ve VS Code na Linuxu a macOS:
-#     1) Kontrola Pythonu 3
-#     2) Virtualni prostredi .venv v koreni projektu
+#     1) Kontrola Pythonu 3 (chybi-li, nabidne instalaci spravcem
+#        balicku: apt, dnf, zypper, pacman, brew - se sudo a otazkou)
+#     2) Virtualni prostredi .venv v koreni projektu (na Ubuntu/Debianu
+#        nabidne instalaci chybejiciho balicku python3.X-venv)
 #     3) Instalace Python knihoven do .venv: mpremote (MicroPython,
 #        obsahuje i pyserial) a matplotlib (graf: mpy plot / cpy plot)
 #     4) Nastaveni panelu a Run on Save v settings.json
@@ -31,7 +33,7 @@
 # umet zkontrolovat i samotny Python.
 # ------------------------------------------------------------
 SCRIPT_NAME="setup.sh"
-SCRIPT_VERSION="3.4"
+SCRIPT_VERSION="3.5"
 SCRIPT_DATE="2026-11-26"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,17 +53,107 @@ echo ""
 chmod +x "$SCRIPT_DIR"/*.sh "$PROJECT_ROOT"/*.sh 2>/dev/null
 
 # ------------------------------------------------------------
+# Instalace systemovych balicku (Python, python3-venv)
+# ------------------------------------------------------------
+# Python se na Linuxu instaluje do systemu spravcem balicku distribuce
+# a potrebuje prava administratora (sudo + heslo). Skript proto
+# nejdriv ukaze, co spusti, a zepta se. Bez terminalu (nelze se zeptat)
+# nebo po odpovedi "n" jen vypise prikaz, ktery ma student spustit sam.
+
+# Spravce balicku: apt (Ubuntu, Debian, Mint), dnf (Fedora), zypper
+# (openSUSE), pacman (Arch, Manjaro), brew (macOS)
+pkg_manager() {
+    for pm in apt-get dnf zypper pacman brew; do
+        if command -v "$pm" &>/dev/null; then
+            echo "$pm"
+            return
+        fi
+    done
+}
+
+# Prikaz instalace balicku pro dany spravce (bez sudo)
+pkg_install_cmd() {
+    local pm="$1"; shift
+    case "$pm" in
+        apt-get) echo "apt-get install -y $*" ;;
+        dnf)     echo "dnf install -y $*" ;;
+        zypper)  echo "zypper --non-interactive install $*" ;;
+        pacman)  echo "pacman -S --noconfirm $*" ;;
+        brew)    echo "brew install $*" ;;
+    esac
+}
+
+# install_packages "popis" balicek... - zepta se a nainstaluje.
+# Vrati 0, kdyz se instalace povedla.
+install_packages() {
+    local what="$1"; shift
+    local pm
+    pm=$(pkg_manager)
+    if [ -z "$pm" ]; then
+        echo "  Nenasel jsem spravce balicku (apt, dnf, zypper, pacman, brew)."
+        echo "  Nainstalujte $what rucne a spustte ./setup.sh znovu."
+        return 1
+    fi
+    local cmd sudo=""
+    cmd=$(pkg_install_cmd "$pm" "$@")
+    # brew a root sudo nepotrebuji
+    if [ "$pm" != "brew" ] && [ "$(id -u)" != "0" ]; then
+        if ! command -v sudo &>/dev/null; then
+            echo "  Instalace potrebuje prava administratora a prikaz sudo neni k dispozici."
+            echo "  Jako root spustte: $cmd"
+            return 1
+        fi
+        sudo="sudo "
+    fi
+    echo "  Chybi $what. Lze ho nainstalovat prikazem:"
+    echo "      $sudo$cmd"
+    if [ ! -t 0 ]; then
+        echo "  (Skript nebezi v terminalu, nemuze se zeptat - spustte prikaz sami.)"
+        return 1
+    fi
+    local answer
+    read -r -p "  Nainstalovat ted? [a/N] " answer
+    case "$answer" in
+        a|A|ano|Ano|y|Y|yes) ;;
+        *)
+            echo "  Neinstaluji. Spustte prikaz vyse sami a pak znovu ./setup.sh."
+            return 1
+            ;;
+    esac
+    [ -n "$sudo" ] && echo "  sudo se zepta na vase heslo (pri psani se nezobrazuje)."
+    if [ "$pm" = "apt-get" ]; then
+        # Seznam balicku muze byt stary (nebo v cerstvem systemu chybet)
+        $sudo apt-get update || return 1
+    fi
+    $sudo $cmd
+}
+
+# ------------------------------------------------------------
 # 1) Check Python
 # ------------------------------------------------------------
 echo "[1/8] Kontrola instalace Pythonu..."
-PY="python3"
-if ! command -v python3 &>/dev/null; then
-    if command -v python &>/dev/null; then
-        PY="python"
-    else
-        echo "ERROR: Python 3 nenalezen."
-        echo "  Na Ubuntu/Debian nainstalujte: sudo apt install python3 python3-venv"
-        echo "  Na macOS nainstalujte: brew install python"
+find_python() {
+    if command -v python3 &>/dev/null; then
+        echo "python3"
+    elif command -v python &>/dev/null && python -c 'import sys; sys.exit(sys.version_info[0] != 3)' 2>/dev/null; then
+        echo "python"
+    fi
+}
+PY=$(find_python)
+if [ -z "$PY" ]; then
+    echo "Python 3 nenalezen."
+    case "$(pkg_manager)" in
+        apt-get) PY_PKGS="python3 python3-venv" ;;
+        pacman)  PY_PKGS="python" ;;
+        brew)    PY_PKGS="python" ;;
+        *)       PY_PKGS="python3" ;;
+    esac
+    # shellcheck disable=SC2086
+    install_packages "Python 3" $PY_PKGS
+    hash -r
+    PY=$(find_python)
+    if [ -z "$PY" ]; then
+        echo "ERROR: Python 3 neni nainstalovany."
         exit 1
     fi
 fi
@@ -82,14 +174,31 @@ else
         echo "Stavajici .venv nefunguje, vytvarim ho znovu..."
         rm -rf "$VENV_DIR"
     fi
-    echo "Vytvarim $VENV_DIR ..."
-    if ! $PY -m venv "$VENV_DIR" || ! "$VENV_PY" -m pip --version &>/dev/null; then
+    make_venv() {
+        echo "Vytvarim $VENV_DIR ..."
+        if $PY -m venv "$VENV_DIR" && "$VENV_PY" -m pip --version &>/dev/null; then
+            return 0
+        fi
         rm -rf "$VENV_DIR"
-        echo "ERROR: Vytvoreni .venv selhalo."
-        echo "  Na Ubuntu/Debian nainstalujte: sudo apt install python3-venv"
-        echo "  (pripadne python3.X-venv podle verze: $($PY --version 2>&1))"
-        echo "  a spustte ./setup.sh znovu."
-        exit 1
+        return 1
+    }
+    if ! make_venv; then
+        # Ubuntu / Debian maji modul venv v samostatnem balicku podle
+        # verze Pythonu: python3.12-venv, python3.11-venv, ...
+        VENV_PKG=""
+        if [ "$(pkg_manager)" = "apt-get" ]; then
+            VENV_PKG="python$($PY -c 'import sys; print("%d.%d" % sys.version_info[:2])')-venv"
+        fi
+        if [ -n "$VENV_PKG" ] && install_packages "modul venv (balicek $VENV_PKG)" "$VENV_PKG" && make_venv; then
+            :
+        else
+            echo "ERROR: Vytvoreni .venv selhalo."
+            if [ -z "$VENV_PKG" ]; then
+                echo "  Zkontrolujte, ze Python ($PY_VER) obsahuje modul venv a pip"
+                echo "  (Ubuntu/Debian: balicek python3-venv), a spustte ./setup.sh znovu."
+            fi
+            exit 1
+        fi
     fi
     echo ".venv vytvoreno."
 fi

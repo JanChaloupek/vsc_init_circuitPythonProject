@@ -123,7 +123,28 @@
         "getwch",
         "kbhit",
         "tcgetattr",
-        "tcsetattr"
+        "tcsetattr",
+        "nbytes",
+        "memaddr",
+        "addrsize",
+        "writevto",
+        "utime",
+        "ujson",
+        "ustruct",
+        "asyncio",
+        "qstr",
+        "mktime",
+        "gmtime",
+        "deepsleep",
+        "lightsleep",
+        "UART",
+        "PWRON",
+        "SIMUL",
+        "Dekorator",
+        "Debianu",
+        "pacman",
+        "noconfirm",
+        "PKGS"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"
@@ -216,7 +237,7 @@
         },
         {
             "id": "pc-sim",
-            "name": "$(debug-alt) Simulace",
+            "name": "$(debug-alt) Sim code.py",
             "label": "▶  Simulace code.py",
             "command": "python .vscode/deska.py cpy sim",
             "color": "lightgreen",
@@ -225,9 +246,27 @@
         },
         {
             "id": "pc-test",
-            "name": "$(beaker) Testy",
-            "label": "✓  Testy",
+            "name": "$(beaker) Testy code.py",
+            "label": "✓  Testy code.py",
             "command": "python .vscode/deska.py cpy test",
+            "color": "lightblue",
+            "group": "Na PC bez desky",
+            "statusBar": false
+        },
+        {
+            "id": "pc-sim-mpy",
+            "name": "$(debug-alt) Sim main.py",
+            "label": "▶  Simulace main.py",
+            "command": "python .vscode/deska.py mpy sim",
+            "color": "lightgreen",
+            "group": "Na PC bez desky",
+            "statusBar": false
+        },
+        {
+            "id": "pc-test-mpy",
+            "name": "$(beaker) Testy main.py",
+            "label": "✓  Testy main.py",
+            "command": "python .vscode/deska.py mpy test",
             "color": "lightblue",
             "group": "Na PC bez desky",
             "statusBar": false

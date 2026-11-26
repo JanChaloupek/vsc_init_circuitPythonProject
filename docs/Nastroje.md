@@ -21,7 +21,7 @@ Spouštěče `mpy.cmd`, `cpy.cmd`, `mpy.sh` a `cpy.sh` mají jen pár řádků: 
 - Python je potřeba stejně – `mpremote`, `pyserial` i `matplotlib` jsou Python knihovny.
 - Odpadají potíže PowerShellu: zakázané spouštění skriptů (*ExecutionPolicy*) na školních počítačích nebo neviditelná značka BOM v dočasných souborech.
 
-Jen **`setup.ps1`** a **`setup.sh`** zůstaly v PowerShellu a bashi, protože musí umět nainstalovat samotný Python.
+Jen **`setup.ps1`** a **`setup.sh`** zůstaly v PowerShellu a bashi, protože musí umět nainstalovat samotný Python. `setup.ps1` ho na Windows nainstaluje jen pro uživatele (bez administrátora). `setup.sh` na Linuxu potřebuje systémový správce balíčků a `sudo`, proto nejdřív vypíše příkaz a zeptá se (`[a/N]`); bez terminálu nebo po odpovědi `n` příkaz jen vypíše. Na Ubuntu/Debianu doinstaluje i chybějící `python3.X-venv`.
 
 ### Knihovny ve virtuálním prostředí `.venv`
 
@@ -233,20 +233,21 @@ Všechno, co běží jen na počítači, je ve složce **`pc/`** (na desku se ne
 
 | Složka | Co obsahuje |
 |---|---|
-| `pc/_fake` | **falešný hardware** – moduly `board`, `digitalio`, `picoed`, `time`, `adafruit_ticks`, `busio`, `pwmio`, `neopixel`, `analogio`. Jediný model hardwaru pro testy i simulaci. |
+| `pc/_fake` | **falešný hardware** – pro CircuitPython `board`, `digitalio`, `picoed`, `time`, `adafruit_ticks`, `busio`, `pwmio`, `neopixel`, `analogio`; pro MicroPython `machine`, `utime` (jako `time`), `micropython`. Jediný model hardwaru pro testy i simulaci. |
 | `pc/_stubs` | typové definice pro nápovědu Pylance (jen pro editor, za běhu se nepoužívají) |
-| `pc/tests` | unit testy (`test_*.py`) |
+| `pc/tests` | unit testy programu `code.py` (`test_*.py`, `cpy test`) |
+| `pc/tests_mpy` | unit testy programu `main.py` (`test_*.py`, `mpy test`) |
 | `pc/simulace` | jen pro simulaci: `konzole.py` vypisuje změny hardwaru a čte klávesy; později sem může přibýt „svět“ robota (trať pod senzory čáry) |
 
 ### Jeden falešný hardware, dva režimy
 
-Příkazy `cpy sim` a `cpy test` (v `deska.py`, funkce `pc_hardware()`) zaregistrují moduly z `pc/_fake` místo skutečných (`sys.modules["board"] = _fake.board`, …) a přepnou režim v `pc/_fake/_rezim.py`:
+Příkazy `cpy sim` / `mpy sim` a `cpy test` / `mpy test` (v `deska.py`, funkce `pc_hardware()`) zaregistrují moduly z `pc/_fake` místo skutečných (`sys.modules["board"] = _fake.board`, …) a přepnou režim v `pc/_fake/_rezim.py`:
 
-| | `cpy test` (režim `test`) | `cpy sim` (režim `sim`) |
+| | `cpy test`, `mpy test` (režim `test`) | `cpy sim`, `mpy sim` (režim `sim`) |
 |---|---|---|
 | Čas | stojí; `time.sleep()` / `adafruit_ticks.advance_ticks()` ho jen posunou, před každým testem se vynuluje | běží podle skutečných hodin; `time.sleep(1)` opravdu čeká |
 | Výstup | nic | změny hardwaru vypisuje `pc/simulace/konzole.py` |
-| Vstupy | test je nastaví v kódu (`picoed.button_a.set_pressed(True)`) | klávesy `a` / `b` (tlačítko drží 0,5 s) |
+| Vstupy | test je nastaví v kódu (`picoed.button_a.set_pressed(True)`, `machine.stiskni("a")`) | klávesy `a` / `b` (tlačítko drží 0,5 s) |
 | Kontrola | test čte uložený stav (`led.state_history`, `write_history`, `music.history`, …) | člověk čte výpis |
 
 Falešné moduly samy nic nevypisují. Při každé změně jen zavolají `_rezim.oznam(co, kdo, hodnota)` – v testu nikdo neposlouchá, v simulaci posluchač z `konzole.py` změnu vypíše:
@@ -254,22 +255,34 @@ Falešné moduly samy nic nevypisují. Při každé změně jen zavolají `_rezi
 ```
      test (pc/tests)  ──▶ ┐                             ┌ nic
                           ├─▶ pc/_fake (model) ─ oznam ─┤
-     cpy sim          ──▶ ┘                             └ pc/simulace/konzole.py → výpis
+     cpy / mpy sim    ──▶ ┘                             └ pc/simulace/konzole.py → výpis
 ```
 
 Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes stejný kód falešného hardwaru.
 
 ### Pořadí a hledání modulů
 
-- Moduly se registrují v pořadí `adafruit_ticks`, `time`, `board`, `digitalio`, `analogio`, `busio`, `pwmio`, `neopixel`, `picoed` (falešný `time` potřebuje `adafruit_ticks`, `picoed` potřebuje `board`, `digitalio` a `busio`).
+- CircuitPython (`cpy`): moduly se registrují v pořadí `adafruit_ticks`, `time`, `board`, `digitalio`, `analogio`, `busio`, `pwmio`, `neopixel`, `picoed` (falešný `time` potřebuje `adafruit_ticks`, `picoed` potřebuje `board`, `digitalio` a `busio`).
+- MicroPython (`mpy`): `adafruit_ticks`, `utime`, `micropython`, `machine`; `utime` je zároveň `time`. Moduly standardní knihovny s „u“ (`uasyncio`, `ujson`, `ustruct`, …) jsou skutečné moduly Pythonu (`asyncio`, `json`, …).
+- Vždy se načte jen jedna sada – `time` má v MicroPythonu jiné funkce (`sleep_ms`, `ticks_ms`) než v CircuitPythonu. Proto má každá platforma svou složku testů.
 - Do cesty pro import se přidá kořen projektu (program studenta a jeho moduly), `lib/` (jako `/lib` na desce) a `pc/` (`_fake`, `tests`, `simulace`).
 - Testy tak mohou psát `import picoed`, `import _fake.adafruit_ticks as fake_ticks` i `from tests.create import ...` – stejně jako v projektu `3-SW_GIT`, jehož 115 testů projde přes `cpy test` beze změny (místo jeho `run_test.py`).
+
+### MicroPython: falešný `machine`
+
+- **Deska** (`machine.nastav_desku`): `picoed` (výchozí) nebo `pico` (`mpy sim --pico`). Pico:ed má na sběrnici I2C0 model čipu displeje IS31FL3731 (adresa `0x74`), tlačítka GP20 / GP21 (stisk = 0, jinak pull-up), LED GP25 a bzučák GP3.
+- **Pin**: stav pinu je společný pro všechny objekty `Pin(25)` (jako na desce). Změna výstupu se oznámí (`pin`), změna vstupu zavolá obsluhu `irq()` podle `IRQ_RISING` / `IRQ_FALLING`.
+- **Timer**: v testu ho spustí posun času – `adafruit_ticks.advance_ticks()` (tedy i `time.sleep_ms`) zavolá `_rezim.casovace(cil_ms)` a ten spustí časovače, které mezitím vyprší, po pořadí. V simulaci čeká na nejbližší časovač vlákno. Tak funguje i odrušení zákmitů v `picoed_v2_lib.Button` (přerušení + jednorázový Timer 20 ms).
+- **Displej**: model čipu si pamatuje 8 snímků a ukazuje ten z konfiguračního registru; `obraz()` vrátí 7 × 17 hodnot jasu. Přenos po I2C trvá jako na desce (9 bitů na bajt při `freq`), proto rolování textu trvá stejně dlouho.
+- **Knihovna** `lib/picoed_v2_lib` se nemění. `pc/_fake/_mp_knihovny.py` jen obalí `Display.scroll` / `clear` a `Music.play` / `pitch`: oznámí výsledek (text, melodii) a dílčí zápisy uvnitř ztiší (`_rezim.ticho()`), jinak by konzole vypsala každý krok rolování.
+- **Klávesy** `a` / `b`: deska zaregistruje, co stisk udělá (`_rezim.registruj_tlacitko`) – falešný `picoed` i falešný `machine`. Konzole volá jen `_rezim.stiskni()`.
+- **Reset**: před každým testem `_rezim.resetuj()` vrátí desku do výchozího stavu (piny, časovače, displej).
 
 ### Jak dál
 
 - **Scénáře:** sled vstupů v čase („ve 2. s stiskni A, senzor čáry vlevo = 1“) – v simulaci přehrát živě, v testu okamžitě a pak zkontrolovat stav.
 - **Svět robota:** poloha JoyCaru a trať v `pc/simulace`, která nastavuje hodnoty falešných senzorů (přes `busio.I2C` a registry expandéru).
-- **MicroPython:** falešné `machine.Pin` / `machine.I2C`, aby šly simulovat a testovat i programy pro `mpy`.
+- **MicroPython:** NeoPixel, `rp2` (PIO), UART a SPI; BBC micro:bit (modul `microbit`).
 
 ---
 

@@ -138,7 +138,7 @@ Tlačítka přidává rozšíření **MicroPython & CircuitPython Panel**. Postr
 
 Ve spodním stavovém řádku jsou s ikonami `CPY Upload` a `CPY REPL` (a jejich `MPY` protějšky). Blok **MicroPython** je pro desky s MicroPythonem (viz `MicroPython.md`). Tlačítko otevře terminál *MicroPython* a příkaz v něm spustí.
 
-Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`) a **✓ Testy** (`cpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [kapitola 7](#7-simulace-a-testy-na-pc-bez-desky).
+Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`), **✓ Testy code.py** (`cpy test`), **▶ Simulace main.py** (`mpy sim`) a **✓ Testy main.py** (`mpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [kapitola 7](#7-simulace-a-testy-na-pc-bez-desky).
 
 Další příkazy (výpis souborů, sledování výstupu, graf, diagnostika, …) jsou v terminálu – viz kapitola 5 a `.\cpy help`. Panel na ně odkazuje dole.
 
@@ -293,6 +293,8 @@ Spusteno code.py (CircuitPython na ELECFREAKS Pico:ed (v1 / v2))
 ```
 
 Ukázkový test je v `pc/tests/test_code_py.py`; nové testy přidávejte do stejné složky (soubory `test_*.py`).
+
+Totéž pro MicroPython (`main.py`) dělají `.\mpy sim` a `.\mpy test` (testy v `pc/tests_mpy`) – viz `docs/MicroPython.md`, kapitola 8.
 
 Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
 

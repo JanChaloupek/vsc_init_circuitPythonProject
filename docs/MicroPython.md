@@ -121,7 +121,7 @@ V grafickém rozhraní VS Code je ovládání navrženo pro maximální komfort 
 Tlačítka přidává rozšíření **MicroPython & CircuitPython Panel** (instaluje ho `setup.bat` / `setup.sh`). Kliknutí na tlačítko otevře integrovaný terminál se jménem `MicroPython` a spustí v něm příkaz.
 
 ### A) Postranní panel (Activity Bar)
-V levém svislém pruhu klikněte na ikonu čipu **MicroPython & CircuitPython**. Panel je **rychlý přístup k základním akcím**. Má bloky **MicroPython** a **CircuitPython** (a blok **Na PC bez desky** se simulací a testy pro CircuitPython). Bloky desek ukazují:
+V levém svislém pruhu klikněte na ikonu čipu **MicroPython & CircuitPython**. Panel je **rychlý přístup k základním akcím**. Má bloky **MicroPython** a **CircuitPython** (a blok **Na PC bez desky** se simulací a testy `code.py` i `main.py`). Bloky desek ukazují:
 
 - **připojenou desku** té platformy – port (např. `COM4`) a jméno desky. Seznam se sám obnovuje každých 5 s, dokud je panel vidět; tlačítkem **↻** nahoře ho obnovíte hned. Sériové porty se při tom neotevírají, takže to nevadí běžícímu REPL ani Serial Monitoru.
 - **čtyři základní tlačítka**.
@@ -281,11 +281,30 @@ Chcete-li do robota nahrát další modul (např. `motory.py` nebo `nastaveni.js
 
 ## 8. Běh na PC a nápověda v editoru
 
-- Simulace (`cpy sim`) a testy (`cpy test`) s falešným hardwarem z `pc/_fake` jsou zatím jen pro **CircuitPython** (moduly `board`, `picoed`, …), viz `docs/CircuitPython.md`, kapitola 7. Falešné moduly MicroPythonu (`machine`, `microbit`) projekt nemá.
-- Výchozí `main.py` jde přesto spustit i na PC – když nenajde žádnou desku, vypisuje „LED“ a „displej“ do konzole:
-  ```bash
-  python main.py
-  ```
+Program jde vyzkoušet i bez desky. Moduly MicroPythonu (`machine`, `time`, `micropython`) mají ve složce **`pc/_fake`** falešné verze:
+
+| Příkaz | Co dělá |
+|---|---|
+| **`.\mpy sim`** | spustí `main.py` (nebo jiný soubor: `.\mpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
+| **`.\mpy test`** | spustí unit testy z `pc/tests_mpy` (jen některé: `.\mpy test test_main`). Čas v testu sám neplyne – `time.sleep_ms(30)` ho jen posune – a test na konci kontroluje, co se s hardwarem dělo. |
+
+V panelu jsou to tlačítka **▶ Simulace main.py** a **✓ Testy main.py** (blok **Na PC bez desky**). Na Linuxu a macOS: `./mpy.sh sim`, `./mpy.sh test`.
+
+Falešný `machine` (`pc/_fake/machine.py`) simuluje desku **Pico:ed v2**: displej s čipem IS31FL3731 na I2C (adresa `0x74`), tlačítka A / B (GP20 / GP21), LED (GP25) a bzučák (GP3). Knihovna `lib/picoed_v2_lib` běží beze změny, takže `main.py` desku pozná stejně jako na robotovi. `.\mpy sim --pico` simuluje **Raspberry Pi Pico** (jen LED).
+
+```text
+Spusteno main.py na desce: ELECFREAKS Pico:ed v2
+[     0.13 s] Displej: text "ZSaPR"
+[     0.58 s] LED: ZAPNUTO (*)
+[     1.08 s] LED: vypnuto ( )
+```
+
+Rolování textu trvá jako na desce – simuluje se i rychlost sběrnice I2C.
+
+Pro testy má falešný `machine` pomocné funkce (na desce nejsou): `machine.historie(25)` (co se zapsalo na pin LED), `machine.stiskni("a")` (tlačítko A), `machine.displej().svitici()` (co ukazuje displej), `machine.nastav_analog(pin, hodnota)` (ADC), `machine.nastav_pulz(pin, us)` (ultrazvuk), `machine.pridej_i2c(...)` (vlastní zařízení na I2C). Ukázka je v `pc/tests_mpy/test_main_py.py`.
+
+Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, SPI a NeoPixel.
+
 - Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
 
 ---

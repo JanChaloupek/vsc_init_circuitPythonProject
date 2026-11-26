@@ -1,0 +1,11 @@
+r"""Unit testy programu main.py (MicroPython), ktere bezi na PC s falesnym
+hardwarem z pc/_fake (machine, utime, micropython).
+
+Spousteni:  .\mpy test            (Linux/macOS: ./mpy.sh test)
+            .\mpy test test_main*  (jen soubory odpovidajici vzoru)
+
+Testy CircuitPythonu (code.py) jsou ve slozce pc/tests - kazda platforma
+ma jine falesne moduly, a proto se spousti zvlast.
+Pred kazdym testem se simulovany cas vynuluje a hardware vrati do
+vychoziho stavu.
+"""

@@ -42,7 +42,7 @@
 #   ODDIL 4  Seriova konzole desky (REPL a raw REPL)
 #   ODDIL 5  Soubory projektu (.ignoreCopy) a stromovy vypis
 #   ODDIL 6  Spolecne prikazy (devices, vscode, graf)
-#   ODDIL 7  CircuitPython - prikazy cpy (vcetne sim a test na PC)
+#   ODDIL 7  CircuitPython - prikazy cpy (a sim / test na PC pro cpy i mpy)
 #   ODDIL 8  MicroPython - prikazy mpy
 #   ODDIL 9  Napoveda, cteni parametru a hlavni funkce
 #
@@ -71,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.1"
+SCRIPT_VERSION = "2.2"
 SCRIPT_DATE = "2026-11-26"
 
 
@@ -1080,8 +1080,10 @@ PANEL_BUTTONS = [
     ("cpy-reset",  "$(debug-restart) CPY Restart", "\u21bb  Restartovat program", "cpy reset", "lightgreen", _CPY, False),
     ("cpy-repl",   "$(terminal) CPY REPL",        "\u2328  Konzole (REPL)",      "cpy repl",   "lightblue",  _CPY, True),
     ("cpy-wipe",   "$(trash) CPY Wipe",           "\U0001f5d1  Smazat desku",    "cpy wipe --yes", "red",  _CPY, False, _WIPE_CPY),
-    ("pc-sim",     "$(debug-alt) Simulace",       "▶  Simulace code.py",    "cpy sim",    "lightgreen", _PC,  False),
-    ("pc-test",    "$(beaker) Testy",             "✓  Testy",               "cpy test",   "lightblue",  _PC,  False),
+    ("pc-sim",     "$(debug-alt) Sim code.py",    "\u25b6  Simulace code.py",  "cpy sim",    "lightgreen", _PC,  False),
+    ("pc-test",    "$(beaker) Testy code.py",     "\u2713  Testy code.py",     "cpy test",   "lightblue",  _PC,  False),
+    ("pc-sim-mpy", "$(debug-alt) Sim main.py",    "\u25b6  Simulace main.py",  "mpy sim",    "lightgreen", _PC,  False),
+    ("pc-test-mpy", "$(beaker) Testy main.py",    "\u2713  Testy main.py",     "mpy test",   "lightblue",  _PC,  False),
 ]
 # Run on Save: po ulozeni souboru s touto priponou se zavola "cpy save".
 # Ktere soubory se opravdu zkopiruji, rozhodne .vscode/.ignoreCopy.
@@ -2143,24 +2145,41 @@ def cp_flash(board, opts):
         raise CpyError("Deska zustala v bootloaderu - je soubor .uf2 urceny pro tuto desku?")
 
 
-# --- Simulace a testy na PC (cpy sim, cpy test) -------------
-# Bez desky: misto modulu board, digitalio, picoed, time, ... se nactou
-# falesne verze z pc/_fake. Stejny model hardwaru slouzi dvema rezimum
-# (pc/_fake/_rezim.py):
+# --- Simulace a testy na PC (cpy/mpy sim, cpy/mpy test) -----
+# Bez desky: misto modulu desky (board, digitalio, picoed, machine, time, ...)
+# se nactou falesne verze z pc/_fake. Stejny model hardwaru slouzi dvema
+# rezimum (pc/_fake/_rezim.py):
 #   test - cas sam neplyne (time.sleep ho jen posune), nic se nevypisuje,
 #          test na konci kontroluje ulozeny stav (napr. led.state_history)
 #   sim  - cas bezi skutecne a pc/simulace/konzole.py vypisuje zmeny
 #          (LED, displej, bzucak) a cte klavesy (tlacitka A/B)
+# CircuitPython a MicroPython maji kazdy svou sadu modulu (napr. time ma
+# v MicroPythonu sleep_ms a ticks_ms, v CircuitPythonu ne). Nacte se vzdy
+# jen jedna sada, a proto jsou i testy ve dvou slozkach: pc/tests
+# (testy code.py) a pc/tests_mpy (testy main.py).
 PC_DIR = PROJECT / "pc"
-# Poradi je dulezite (stejne jako run_test.py v 3-SW_GIT): falesny time
-# potrebuje adafruit_ticks, picoed potrebuje board, digitalio a busio.
-FAKE_MODULES = ["adafruit_ticks", "time", "board", "digitalio", "analogio",
-                "busio", "pwmio", "neopixel", "picoed"]
+FAKE_MODULES = {
+    # Poradi je dulezite (stejne jako run_test.py v 3-SW_GIT): falesny time
+    # potrebuje adafruit_ticks, picoed potrebuje board, digitalio a busio.
+    "cpy": ["adafruit_ticks", "time", "board", "digitalio", "analogio",
+            "busio", "pwmio", "neopixel", "picoed"],
+    # utime = time MicroPythonu (sleep_ms, ticks_ms, ...), machine = Pin, I2C, PWM, Timer
+    "mpy": ["adafruit_ticks", "utime", "micropython", "machine"],
+}
+# MicroPython zna nektere moduly i pod jmenem s "u" (utime, ujson, ...)
+MPY_ALIASES = {"time": "utime", "uasyncio": "asyncio", "ujson": "json", "ure": "re",
+               "ustruct": "struct", "ucollections": "collections", "uerrno": "errno",
+               "uio": "io", "ubinascii": "binascii", "uhashlib": "hashlib",
+               "urandom": "random", "uselect": "select", "uos": "os", "usys": "sys"}
+PC_PLATFORMS = {"cpy": ("CircuitPython", CP_ENTRY, "tests"), "mpy": ("MicroPython", MP_ENTRY, "tests_mpy")}
+PC_BOARDS = {"picoed": "ELECFREAKS Pico:ed v2", "pico": "Raspberry Pi Pico"}
 
 
-def pc_hardware(rezim):
+def pc_hardware(rezim, platforma="cpy", deska="picoed"):
     """Pripravi falesny hardware z pc/_fake a vrati modul _rezim."""
     import importlib
+    # Driv nez falesny time: tyto moduly si berou skutecny time
+    import asyncio, threading, unittest     # noqa: E401,F401
     if not (PC_DIR / "_fake").is_dir():
         raise CpyError(f"Chybi slozka {PC_DIR / '_fake'} s falesnym hardwarem.")
     # Hledani modulu: program studenta a jeho moduly (koren projektu),
@@ -2170,23 +2189,34 @@ def pc_hardware(rezim):
             sys.path.insert(0, str(p))
     rezim_modul = importlib.import_module("_fake._rezim")
     rezim_modul.nastav(rezim)
-    for name in FAKE_MODULES:
+    for name in FAKE_MODULES[platforma]:
         sys.modules[name] = importlib.import_module("_fake." + name)
+    if platforma == "mpy":
+        for alias, name in MPY_ALIASES.items():
+            sys.modules[alias] = sys.modules.get(name) or importlib.import_module(name)
+        sys.modules["machine"].nastav_desku(deska)
+        # lib/picoed_v2_lib: displej a bzucak oznamuji jen vysledek (text, melodii)
+        importlib.import_module("_fake._mp_knihovny").obal()
     return rezim_modul
 
 
-def cp_sim(board, opts):
-    """Simulace programu (code.py) na PC s falesnym hardwarem."""
+def pc_sim(platforma, opts):
+    """Simulace programu (code.py / main.py) na PC s falesnym hardwarem."""
     import runpy
     import traceback
-    rel = opts.args[0] if opts.args else CP_ENTRY
+    jmeno, entry, _ = PC_PLATFORMS[platforma]
+    rel = opts.args[0] if opts.args else entry
     program = PROJECT / rel
     if not program.is_file():
         raise CpyError(f"Soubor {rel} nenalezen.")
-    rezim = pc_hardware("sim")
+    deska = "pico" if opts.has("pico") else "picoed"
+    rezim = pc_hardware("sim", platforma, deska)
     from simulace import konzole
     klavesy = konzole.spust(rezim)
-    say(f"Simulace {rel} na PC (falesny hardware z pc/_fake, deska se nepouziva).", "info")
+    say(f"Simulace {rel} na PC ({jmeno}, falesny hardware z pc/_fake, deska se nepouziva).", "info")
+    if platforma == "mpy":
+        say(f"   Simulovana deska: {PC_BOARDS[deska]}" + ("" if opts.has("pico") else
+            "   (--pico = Raspberry Pi Pico)"))
     say("   Klavesy: a / b = tlacitko A / B, q nebo Ctrl+C = konec." if klavesy
         else "   Konec: Ctrl+C. (Klavesy a/b nefunguji - vstup neni terminal.)")
     line()
@@ -2214,27 +2244,29 @@ def cp_sim(board, opts):
         konzole.zastav()
 
 
-def cp_test(board, opts):
-    """Unit testy z pc/tests na PC s falesnym hardwarem."""
-    import unittest             # driv nez falesny time (unittest si bere skutecny)
-    tests_dir = PC_DIR / "tests"
+def pc_test(platforma, opts):
+    """Unit testy z pc/tests (cpy) nebo pc/tests_mpy (mpy) na PC s falesnym hardwarem."""
+    jmeno, entry, slozka = PC_PLATFORMS[platforma]
+    tests_dir = PC_DIR / slozka
     if not tests_dir.is_dir():
         raise CpyError(f"Chybi slozka {tests_dir} s testy.")
     pattern = opts.args[0] if opts.args else "test*.py"
     if not pattern.endswith(".py"):
         pattern += "*.py" if not pattern.endswith("*") else ".py"
-    pc_hardware("test")
+    rezim = pc_hardware("test", platforma)
+    import unittest
     ticks = sys.modules["adafruit_ticks"]
 
     class Vysledek(unittest.TextTestResult):
         def startTest(self, test):
+            rezim.resetuj()             # hardware do vychoziho stavu (machine: piny, casovace)
             ticks.set_ticks_ms(0)       # kazdy test zacina v case 0
             super().startTest(test)
 
     suite = unittest.TestLoader().discover(str(tests_dir), pattern=pattern, top_level_dir=str(PC_DIR))
     if suite.countTestCases() == 0:
         raise CpyError(f"V {tests_dir} nejsou zadne testy odpovidajici vzoru {pattern}.")
-    say(f"Testy z pc/tests (vzor {pattern}) na PC s falesnym hardwarem:", "info")
+    say(f"Testy {entry} ({jmeno}) z pc/{slozka} (vzor {pattern}) na PC s falesnym hardwarem:", "info")
     line()
     vysledek = unittest.TextTestRunner(verbosity=2, resultclass=Vysledek, stream=sys.stdout).run(suite)
     line()
@@ -2244,6 +2276,22 @@ def cp_test(board, opts):
     say(col("ERROR", "error") + f": neproslo {len(vysledek.failures) + len(vysledek.errors)} "
         f"z {vysledek.testsRun} testu.")
     return 1
+
+
+def cp_sim(board, opts):
+    return pc_sim("cpy", opts)
+
+
+def cp_test(board, opts):
+    return pc_test("cpy", opts)
+
+
+def mp_sim(opts):
+    return pc_sim("mpy", opts)
+
+
+def mp_test(opts):
+    return pc_test("mpy", opts)
 
 
 # ============================================================
@@ -2803,6 +2851,11 @@ HELP_MPY = """Pouziti: mpy <prikaz> [volby]          (v PowerShellu: .\\mpy <pri
   devices               jake desky jsou pripojene
   help                  tato napoveda
 
+Na PC bez desky (falesny hardware z pc/_fake):
+  sim [soubor] [--pico] simulace programu (main.py) na Pico:ed v2 (--pico = Raspberry Pi Pico):
+                        vypisuje LED, displej, bzucak; klavesy a / b = tlacitko A / B, q = konec
+  test [vzor]           unit testy z pc/tests_mpy (jen soubory podle vzoru, napr. test_main)
+
 Volby:
   --port COMx           port desky (jinak automaticky; promenna MICROPYTHON_PORT)
   -y, --yes             bez potvrzovaci otazky (wipe, setup)
@@ -2834,7 +2887,7 @@ Jen pro CircuitPython:
   bootloader            prepne desku do rezimu BOOTSEL (disk RPI-RP2)
   flash <soubor.uf2>    nahraje firmware do desky
 
-Na PC bez desky (falesny hardware z pc/_fake):
+Na PC bez desky (falesny hardware z pc/_fake; pro main.py: mpy sim, mpy test):
   sim [soubor]          simulace programu (code.py): vypisuje LED, displej, bzucak;
                         klavesy a / b = tlacitko A / B, q = konec
   test [vzor]           unit testy z pc/tests (jen soubory podle vzoru, napr. test_code)
@@ -2894,6 +2947,8 @@ MPY_COMMANDS = {
     "setup": (mp_setup, set()),
     "reset": (mp_reset, {"hard"}),
     "plot": (mp_plot, {"seconds"}),
+    "sim": (mp_sim, {"pico"}),
+    "test": (mp_test, set()),
 }
 VALUE_OPTIONS = {"--port": "port", "-p": "port", "--drive": "drive", "-d": "drive"}
 

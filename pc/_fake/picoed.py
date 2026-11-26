@@ -263,3 +263,7 @@ button_a = Button(board.BUTTON_A)
 button_b = Button(board.BUTTON_B)
 led = Led(board.LED)
 music = Music(board.BUZZER)
+
+# Klavesy a / b v konzoli simulace stisknou tlacitka A / B
+_rezim.registruj_tlacitko("a", button_a.set_pressed)
+_rezim.registruj_tlacitko("b", button_b.set_pressed)

@@ -16,6 +16,8 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
    >
    > Po změně v `settings.json` (vlastní úprava, `git pull`) stačí znovu spustit `./setup.sh`, případně jen `python3 .vscode/deska.py vscode`.
    >
+   > Když na Linuxu chybí Python 3 nebo balíček `python3-venv`, `./setup.sh` nabídne jejich instalaci (`apt`, `dnf`, `zypper`, `pacman`, na macOS `brew`) – po odpovědi `a` ji spustí přes `sudo`.
+   >
    > Když `./setup.sh` hlásí `Permission denied`, spusťte ho jako **`bash setup.sh`**. Stává se to, když se projekt rozbalil na Windows a pak zkopíroval, nebo leží na flashce či disku s FAT/NTFS. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`.
 3. Připojte desku **datovým** USB kabelem a v terminálu (`Ctrl+~`) zjistěte, co je připojené:
    ```powershell
@@ -27,14 +29,16 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 
 ## Simulace a testy na PC (bez desky)
 
-Program jde vyzkoušet i bez robota. Moduly `board`, `digitalio`, `picoed`, `time`, … se nahradí falešnými verzemi ze složky `pc/_fake`:
+Program jde vyzkoušet i bez robota. Moduly desky se nahradí falešnými verzemi ze složky `pc/_fake` – pro CircuitPython `board`, `digitalio`, `picoed`, `time`, …, pro MicroPython `machine`, `time`, `micropython`:
 
 | Příkaz | Co dělá |
 |---|---|
 | **`.\cpy sim`** | spustí `code.py` (nebo jiný soubor: `.\cpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák, NeoPixel. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
-| **`.\cpy test`** | spustí unit testy z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
+| **`.\cpy test`** | spustí unit testy programu `code.py` z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
+| **`.\mpy sim`** | totéž pro `main.py` (MicroPython). Falešný modul `machine` simuluje desku Pico:ed v2 (displej, tlačítka A / B, LED, bzučák) a knihovna `lib/picoed_v2_lib` běží beze změny. `.\mpy sim --pico` simuluje Raspberry Pi Pico. |
+| **`.\mpy test`** | unit testy programu `main.py` ze složky `pc/tests_mpy` (falešný `machine` má pro testy pomocné funkce, např. `machine.stiskni("a")`, `machine.historie(25)`). |
 
-Simulace i testy používají **stejný falešný hardware** – co ukazuje simulace, to ověřují testy. Na Linuxu a macOS: `./cpy.sh sim`, `./cpy.sh test`. Podrobnosti: [docs/Nastroje.md](docs/Nastroje.md#10-simulace-a-testy-na-pc-složka-pc).
+Simulace i testy používají **stejný falešný hardware** – co ukazuje simulace, to ověřují testy. Na Linuxu a macOS: `./cpy.sh sim`, `./mpy.sh sim`, … Podrobnosti: [docs/Nastroje.md](docs/Nastroje.md#10-simulace-a-testy-na-pc-složka-pc).
 
 ## Obsah projektu
 
@@ -47,7 +51,7 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
 | **`cpy.cmd`** / **`cpy.sh`** | spouštěč nástroje **`cpy`** pro CircuitPython |
-| **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
+| **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` (CircuitPython) a `pc/tests_mpy` (MicroPython) a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
 | **`.gitignore`** | co se neukládá do gitu |
 | **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
 
@@ -85,6 +89,6 @@ Rozšíření **MicroPython & CircuitPython Panel** přidá do levého svislého
 | ⌨ Konzole (REPL) | ⌨ Konzole (REPL) | ano (`MPY REPL`, `CPY REPL`) |
 | 🗑 Smazat desku | 🗑 Smazat desku | – (před smazáním se VS Code zeptá) |
 
-Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`) a **✓ Testy** (`cpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky).
+Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`), **✓ Testy code.py** (`cpy test`), **▶ Simulace main.py** (`mpy sim`) a **✓ Testy main.py** (`mpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky).
 
 Všechno ostatní (výpis souborů, graf, diagnostika, …) je v terminálu: `.\mpy help`, `.\cpy help`.

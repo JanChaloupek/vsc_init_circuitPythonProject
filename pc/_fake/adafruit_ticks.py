@@ -71,4 +71,7 @@ def advance_ticks(delta: int) -> None:
     if _rezim.je_simulace():
         _rezim.realne_cekej(int(delta) / 1000)
         return
-    _fake_ticks = (_fake_ticks + int(delta)) % _TICKS_PERIOD
+    cil = _fake_ticks + int(delta)
+    if _rezim.casovace is not None:
+        _rezim.casovace(cil)        # casovace machine.Timer, ktere mezitim vyprsi
+    _fake_ticks = cil % _TICKS_PERIOD

@@ -14,10 +14,14 @@ Klavesy (jen kdyz je vstup terminal):
     a / b  ... stisk tlacitka A / B (drzi se DRZENI_TLACITKA sekund)
     q      ... konec simulace (jako Ctrl+C)
 
+Co klavesa udela, urcuje simulovana deska (_rezim.registruj_tlacitko):
+falesny picoed (CircuitPython) i falesny machine pro Pico:ed (MicroPython).
+
 Vystup je zamerne jen ASCII: konzole Windows (cp1250) neumi vsechny znaky.
 """
 
 import _thread
+import os
 import sys
 import threading
 
@@ -50,7 +54,7 @@ _posledni = {}
 
 
 def _posluchac(co, kdo, hodnota):
-    if co in ("neopixel", "displej") and kdo != "scroll":
+    if co in ("neopixel", "displej", "pwm") and kdo != "scroll":
         if _posledni.get((co, kdo)) == hodnota:
             return
         _posledni[(co, kdo)] = hodnota
@@ -67,14 +71,21 @@ def _posluchac(co, kdo, hodnota):
     elif co == "bzucak":
         if kdo == "pitch":
             frekvence, delka = hodnota
-            _vypis(f"Bzucak: ton {frekvence} Hz" + (f", {delka} ms" if delka else ""))
+            if not frekvence:
+                _vypis("Bzucak: ticho")
+            else:
+                _vypis(f"Bzucak: ton {frekvence} Hz" + (f", {delka:g} ms" if delka else ""))
         elif kdo == "play":
-            _vypis(f"Bzucak: melodie {hodnota!r}")
+            _vypis(f"Bzucak: melodie {hodnota}" if isinstance(hodnota, str) and hodnota.startswith("Music.")
+                   else f"Bzucak: melodie {hodnota!r}")
         else:
             _vypis("Bzucak: ticho")
     elif co == "tlacitko":
         jmeno = _JMENA_TLACITEK.get(kdo, kdo)
         _vypis(f"Tlacitko {jmeno}: " + ("stisknuto" if hodnota else "pusteno"))
+    elif co == "pwm":
+        frekvence, strida = hodnota
+        _vypis(f"PWM {kdo}: {frekvence} Hz, strida {strida * 100 / 65535:.0f} %")
     elif co == "neopixel":
         _vypis("NeoPixel: " + " ".join("#%02x%02x%02x" % tuple(p[:3]) for p in hodnota))
 
@@ -83,23 +94,18 @@ def _posluchac(co, kdo, hodnota):
 # Klavesy
 # ---------------------------------------------------------
 
-def _stiskni(jmeno):
-    picoed = sys.modules.get("picoed")
-    tlacitko = getattr(picoed, jmeno, None)
-    if tlacitko is None:
-        return
-    tlacitko.set_pressed(True)
-    casovac = threading.Timer(DRZENI_TLACITKA, tlacitko.set_pressed, args=(False,))
+def _stiskni(klavesa):
+    if not _rezim.stiskni(klavesa, True):
+        return                          # deska takove tlacitko nema
+    casovac = threading.Timer(DRZENI_TLACITKA, _rezim.stiskni, args=(klavesa, False))
     casovac.daemon = True
     casovac.start()
 
 
 def _klavesa(znak):
     znak = znak.lower()
-    if znak == "a":
-        _stiskni("button_a")
-    elif znak == "b":
-        _stiskni("button_b")
+    if znak in ("a", "b"):
+        _stiskni(znak)
     elif znak == "q":
         _thread.interrupt_main()        # v hlavnim vlakne vyvola KeyboardInterrupt
 
@@ -115,10 +121,14 @@ def _cti_klavesy_windows():
 
 def _cti_klavesy_posix():
     import select
+    fd = sys.stdin.fileno()
     while _bezi:
-        pripraveno, _, _ = select.select([sys.stdin], [], [], 0.05)
+        pripraveno, _, _ = select.select([fd], [], [], 0.05)
         if pripraveno:
-            _klavesa(sys.stdin.read(1))
+            # os.read misto sys.stdin.read: stdin ma vlastni vyrovnavaci pamet
+            # a select by o znacich, ktere uz jsou v ni, nevedel
+            for znak in os.read(fd, 32).decode(errors="ignore"):
+                _klavesa(znak)
 
 
 # ---------------------------------------------------------
