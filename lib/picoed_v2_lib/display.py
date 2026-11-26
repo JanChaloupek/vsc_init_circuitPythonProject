@@ -9,6 +9,13 @@ class Display(Matrix):
     width = 17
     height = 7
 
+    def __init__(self, i2c=None, address=0x74):
+        if i2c is None:
+            from machine import I2C, Pin
+            from picoed_v2_lib.iic import IIC
+            i2c = I2C(IIC.BUS0, sda=Pin(IIC.SDA0), scl=Pin(IIC.SCL0))
+        super().__init__(i2c, address)
+
     _current_frame = 0
 
     _BITMAP = (
