@@ -37,13 +37,14 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 | **`_stubs/`** | typové stuby pro nápovědu (IntelliSense) ve VS Code |
 | **`pyrightconfig.json`** | nastavení analyzátoru Pylance/Pyright (nápověda bez falešných chyb) |
 | **`.gitignore`** | co se neukládá do gitu |
+| **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
 
 ### Složka `.vscode/`
 
 | Soubor | K čemu je |
 |---|---|
 | **`deska.py`** | **všechny nástroje v jednom souboru**: příkazy `mpy` (MicroPython přes `mpremote`), `cpy` (CircuitPython – přímý zápis na disk `CIRCUITPY`), přehled desek `devices`, graf hodnot `plot` a nastavení panelu `vscode`. Funguje stejně ve Windows, Linuxu i macOS. |
-| **`setup.ps1`** / **`setup.sh`** | instalace Pythonu (Windows), knihoven `mpremote` a `matplotlib`, rozšíření VS Code; nastavení panelu a Run on Save |
+| **`setup.ps1`** / **`setup.sh`** | instalace Pythonu (Windows), virtuální prostředí `.venv` s knihovnami `mpremote` a `matplotlib`, rozšíření VS Code; nastavení panelu a Run on Save |
 | **`settings.json`** | nastavení editoru, tlačítek panelu a Run on Save (tlačítka a Run on Save zapisuje `deska.py vscode`) |
 | **`extensions.json`** | doporučená rozšíření VS Code |
 | **`.ignoreCopy`** | co se **nenahrává** na CircuitPython desku (pro `Ctrl+S` i `cpy upload`) |

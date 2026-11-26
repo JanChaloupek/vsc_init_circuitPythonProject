@@ -2,7 +2,7 @@
 # ============================================================
 # deska.py - nastroj pro praci s deskami s MicroPythonem a CircuitPythonem
 #
-# Verze: 2.0 (2026-11-26)
+# Verze: 2.1 (2026-11-26)
 #
 # K CEMU TO JE
 #   Jeden soubor, ktery umi nahrat program do desky, spustit ho,
@@ -48,10 +48,13 @@
 #
 # CO POTREBUJE
 #   - Python 3.8 nebo novejsi
-#   - mpremote   (python -m pip install mpremote) - obsahuje i pyserial
-#   - matplotlib (python -m pip install matplotlib) - jen pro graf (plot)
-#   - circup     (python -m pip install circup)     - jen pro cpy lib
-#   Vse krome circup nainstaluje setup.bat / setup.sh.
+#   - mpremote   - komunikace s MicroPythonem, obsahuje i pyserial
+#   - matplotlib - jen pro graf (plot)
+#   - circup     - jen pro cpy lib (setup ho neinstaluje)
+#   Knihovny instaluje setup.bat / setup.sh do virtualniho prostredi
+#   .venv v koreni projektu (jen pro tento projekt, systemovy Python
+#   zustane cisty). Kdyz .venv existuje, deska.py se v nem sam spusti
+#   znovu - prikazy proto staci psat s obycejnym "python" / "python3".
 # ============================================================
 import contextlib
 import fnmatch
@@ -68,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.0"
+SCRIPT_VERSION = "2.1"
 SCRIPT_DATE = "2026-11-26"
 
 
@@ -124,6 +127,95 @@ SYSTEM_ENTRIES = {"System Volume Information", ".fseventsd", ".Trashes", ".Trash
 #   NO_COLOR=1         bez barev
 DEBUG = bool(os.environ.get("CPY_DEBUG"))
 IS_WIN = sys.platform == "win32"
+
+# Virtualni prostredi projektu s knihovnami (vytvari ho setup.bat / setup.sh).
+VENV_DIR = PROJECT / ".venv"
+VENV_PY = VENV_DIR / ("Scripts/python.exe" if IS_WIN else "bin/python")
+SETUP_HINT = "spust setup.bat (Windows) nebo ./setup.sh (Linux, macOS) - nainstaluje knihovny do .venv"
+# Python pro nastroje spoustene jako samostatny proces (mpremote, circup).
+# use_venv() ho prepne na Python z .venv.
+TOOL_PY = sys.executable
+
+
+def pip_cmd(name):
+    """Prikaz pro rucni instalaci knihovny (do .venv, kdyz existuje)."""
+    if VENV_PY.exists():
+        py = r".venv\Scripts\python" if IS_WIN else ".venv/bin/python"
+    else:
+        py = "python" if IS_WIN else "python3"
+    return f"{py} -m pip install {name}"
+
+
+def missing_lib(name, what=""):
+    """Chyba pro chybejici Python knihovnu - s radou, jak ji ziskat."""
+    return CpyError(f"Chybi knihovna {name}{what}: {SETUP_HINT}\n"
+                    f"       (rucne: {pip_cmd(name)})")
+
+
+def _same_path(a, b):
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return False
+
+
+def use_venv():
+    """Zpristupni knihovny z .venv projektu (mpremote, pyserial, matplotlib).
+    Bez .venv nedela nic.
+
+    Bezny pripad: .venv vzniklo ze stejneho Pythonu, jaky prave bezi - pak
+    staci pridat jeho slozku site-packages do sys.path (rychle, zadny dalsi
+    proces). Jinak (jiny Python nez ten, ze ktereho .venv vzniklo) se
+    deska.py spusti znovu Pythonem z .venv."""
+    global TOOL_PY
+    if not VENV_PY.exists() or _same_path(sys.prefix, VENV_DIR):
+        return                                  # bez .venv, nebo uz bezime v nem
+    home = None
+    with contextlib.suppress(OSError):
+        for row in (VENV_DIR / "pyvenv.cfg").read_text(encoding="utf-8").splitlines():
+            key, _, value = row.partition("=")
+            if key.strip() == "home":
+                home = value.strip()
+    if IS_WIN:
+        site_dir = VENV_DIR / "Lib" / "site-packages"
+    else:
+        site_dir = VENV_DIR / "lib" / f"python{sys.version_info[0]}.{sys.version_info[1]}" / "site-packages"
+    base_exe = getattr(sys, "_base_executable", None) or sys.executable
+    if home and site_dir.is_dir() and _same_path(home, Path(base_exe).parent):
+        import site
+        site.addsitedir(str(site_dir))
+        TOOL_PY = str(VENV_PY)
+        return
+    names = ("python.exe",) if IS_WIN else ("python3", "python")
+    if not home or not any((Path(home) / n).exists() for n in names):
+        # Python, ze ktereho .venv vzniklo, uz neexistuje (odinstalovany,
+        # aktualizovany) - .venv nejde spustit. Pokracuje se bez nej.
+        print(f"Upozorneni: virtualni prostredi .venv nejde pouzit, {SETUP_HINT}.", file=sys.stderr)
+        return
+    run_in_venv()
+
+
+def run_in_venv():
+    """Spusti deska.py znovu Pythonem z .venv a skonci s jeho navratovym
+    kodem. Kdyz .venv nejde spustit, pokracuje se bez nej."""
+    if os.environ.get("DESKA_VENV"):
+        return
+    env = dict(os.environ, DESKA_VENV="1")  # pojistka proti zacykleni
+    args = [str(VENV_PY), str(Path(__file__).resolve()), *sys.argv[1:]]
+    if not IS_WIN:
+        try:
+            os.execve(args[0], args, env)   # nahradi tento proces
+        except OSError:
+            return                          # rozbite .venv - pokracuj bez nej
+    try:
+        child = subprocess.Popen(args, env=env)
+    except OSError:
+        return
+    while True:                             # Ctrl+C patri detskemu procesu (REPL, graf)
+        try:
+            sys.exit(child.wait())
+        except KeyboardInterrupt:
+            continue
 
 
 # ============================================================
@@ -510,7 +602,7 @@ class Repl:
         try:
             import serial
         except ImportError:
-            raise CpyError("Chybi modul pyserial: python -m pip install pyserial")
+            raise missing_lib("pyserial")
         try:
             self.ser = serial.Serial(port, BAUD, timeout=0.05, write_timeout=2)
         except (serial.SerialException, OSError) as e:
@@ -1072,12 +1164,12 @@ def run_plotter(port, title, seconds=None):
         import matplotlib.pyplot as plt
         from matplotlib.animation import FuncAnimation
     except ImportError:
-        raise CpyError("Graf potrebuje knihovnu matplotlib: python -m pip install matplotlib")
+        raise missing_lib("matplotlib", " (graf)")
     try:
         import serial
         ser = serial.Serial(port, BAUD, timeout=0)
     except ImportError:
-        raise CpyError("Chybi modul pyserial: python -m pip install pyserial")
+        raise missing_lib("pyserial")
     except (serial.SerialException, OSError) as e:
         raise CpyError(f"Port {port} nelze otevrit: {e}\n"
                        "       - neni otevreny REPL / Serial Monitor v jinem okne?")
@@ -1963,14 +2055,14 @@ def cp_plot(board, opts):
 
 def cp_lib(board, opts):
     """cpy lib ...: knihovny Adafruit pres nastroj circup (zapisuje na disk)."""
-    chk = subprocess.run([sys.executable, "-m", "circup", "--version"], capture_output=True)
+    chk = subprocess.run([TOOL_PY, "-m", "circup", "--version"], capture_output=True)
     if chk.returncode != 0:
-        raise CpyError("Chybi nastroj circup: python -m pip install circup")
+        raise CpyError(f"Chybi nastroj circup: {pip_cmd('circup')}")
     drive = board.drive
     args = opts.args or ["freeze"]
     say("circup " + " ".join(args), "info")
     line()
-    return subprocess.call([sys.executable, "-m", "circup", "--path", str(drive)] + args)
+    return subprocess.call([TOOL_PY, "-m", "circup", "--path", str(drive)] + args)
 
 
 def cp_open(board, opts):
@@ -2048,7 +2140,7 @@ def cp_flash(board, opts):
 #   soft-reset / reset   mekky / tvrdy restart
 # Vic prikazu jde spojit znakem '+' do jednoho spojeni (je to rychlejsi).
 def mpremote_cmd(port, *args):
-    return [sys.executable, "-m", "mpremote", "connect", port, *args]
+    return [TOOL_PY, "-m", "mpremote", "connect", port, *args]
 
 
 def mpremote(port, *args, capture=False, timeout=None):
@@ -2065,7 +2157,7 @@ def mpremote(port, *args, capture=False, timeout=None):
 def mp_require():
     import importlib.util
     if importlib.util.find_spec("mpremote") is None:
-        raise CpyError("Chybi nastroj mpremote: python -m pip install mpremote")
+        raise missing_lib("mpremote")
 
 
 def mp_locate(opts):
@@ -2772,4 +2864,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    use_venv()
     sys.exit(main(sys.argv[1:]))

@@ -23,6 +23,20 @@ Spouštěče `mpy.cmd`, `cpy.cmd`, `mpy.sh` a `cpy.sh` mají jen pár řádků: 
 
 Jen **`setup.ps1`** a **`setup.sh`** zůstaly v PowerShellu a bashi, protože musí umět nainstalovat samotný Python.
 
+### Knihovny ve virtuálním prostředí `.venv`
+
+`setup.bat` / `setup.sh` instalují knihovny (`mpremote`, `pyserial`, `matplotlib`) do složky **`.venv`** v kořeni projektu, ne do systémového Pythonu:
+- Novější Linuxy (Ubuntu 23.04+, Debian 12+) instalaci přes `pip` mimo virtuální prostředí odmítají (chyba `externally-managed-environment`).
+- Každý projekt má své knihovny a systémový Python zůstane čistý. Cena je asi 140 MB na projekt (hlavně `matplotlib` a `numpy`).
+
+Příkazy v panelu, Run on Save i spouštěče dál volají obyčejné `python .vscode/deska.py …` (na Linuxu a macOS `python3`). `deska.py` si `.venv` najde sám:
+- `.venv` vzniklo ze stejného Pythonu, který právě běží (běžný případ): přidá si jeho knihovny do cesty, kde Python hledá moduly. Je to rychlé, nespouští se žádný další proces.
+- `.venv` vzniklo z jiného Pythonu: spustí se znovu Pythonem z `.venv`.
+- `.venv` neexistuje: použijí se knihovny systémového Pythonu (projekty připravené dřívější verzí setupu).
+- `.venv` je rozbité (Python, ze kterého vzniklo, byl odinstalovaný): `deska.py` vypíše upozornění a pokračuje bez něj. `setup.bat` / `setup.sh` takové `.venv` pozná a vytvoří znovu.
+
+Další knihovnu (např. `circup` pro `cpy lib`) nainstalujete do `.venv` takto: `.venv\Scripts\python -m pip install circup` (Windows), `.venv/bin/python -m pip install circup` (Linux, macOS).
+
 Soubor `deska.py` je rozdělený na oddíly (v kódu hledejte `ODDIL`):
 
 | Oddíl | Obsah |

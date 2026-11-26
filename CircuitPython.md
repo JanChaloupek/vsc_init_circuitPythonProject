@@ -64,7 +64,9 @@ Před první prací spusťte jednorázový instalační skript:
 - **Na Windows:** dvojklikem spusťte **`setup.bat`** v kořeni projektu.
 - **Na Linuxu a macOS:** v terminálu spusťte **`./setup.sh`**. Tady je **povinný**: nastavení je připravené pro Windows (příkaz `python`) a skript ho přepíše na `python3`. Bez něj nefunguje nahrávání po `Ctrl+S` ani tlačítka panelu.
 
-Skript nainstaluje Python knihovny (`mpremote`, který obsahuje i `pyserial`, a `matplotlib` pro graf), rozšíření VS Code a nastaví tlačítka panelu i automatické nahrávání po `Ctrl+S`. Na konci vypíše, jaké desky jsou připojené.
+Skript na Windows v případě potřeby nainstaluje Python. Ve složce projektu vytvoří virtuální prostředí **`.venv`** a nainstaluje do něj Python knihovny (`mpremote`, který obsahuje i `pyserial`, a `matplotlib` pro graf). Knihovny tak patří jen k tomuto projektu a nástroje `cpy` a `mpy` si `.venv` najdou samy. Dál skript nainstaluje rozšíření VS Code a nastaví tlačítka panelu i automatické nahrávání po `Ctrl+S`. Na konci vypíše, jaké desky jsou připojené.
+
+> 💡 Když `setup.bat` právě nainstaloval Python, **zavřete VS Code a otevřete ho znovu**. Jinak editor nový Python nenajde a nefunguje `Ctrl+S` ani tlačítka panelu.
 
 ### Důležitá nainstalovaná rozšíření pro CircuitPython:
 - **`emeraldwalk.runonsave`** (Run on Save) – po stisku `Ctrl+S` zkopíruje uložený soubor na disk robota.
@@ -261,7 +263,7 @@ Jak nástroj funguje uvnitř, popisuje **[Nastroje.md](Nastroje.md)**.
 ## 6. Knihovny pro CircuitPython (`CIRCUITPY/lib`)
 
 Desky Pico:ed mají základní funkce v modulu `picoed`. Pokud potřebujete připojit další hardware (např. I2C expandéry PCA9555 / PCA9685, senzory prostředí):
-- **Automaticky:** nainstalujte nástroj `circup` (`python -m pip install circup`) a pak:
+- **Automaticky:** nainstalujte do `.venv` projektu nástroj `circup` (Windows: `.venv\Scripts\python -m pip install circup`, Linux a macOS: `.venv/bin/python -m pip install circup`) a pak:
   ```bash
   cpy lib install adafruit_pca9685     # nainstaluje knihovnu i její závislosti
   cpy lib list                         # které knihovny mají novější verzi

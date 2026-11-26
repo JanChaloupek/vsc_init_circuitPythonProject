@@ -110,7 +110,10 @@
         "WAWAWAWAA",
         "wmerkens",
         "writeto",
-        "zaroluje"
+        "zaroluje",
+        "numpy",
+        "setupu",
+        "venv"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"

@@ -108,7 +108,9 @@ Před prvním spuštěním je nutné připravit nástroje a rozšíření v edit
 - **Na Windows:** dvojklikem spusťte **`setup.bat`** v kořeni projektu.
 - **Na Linuxu a macOS:** v terminálu spusťte **`./setup.sh`**. Tady je **povinný**: nastavení je připravené pro Windows (příkaz `python`) a skript ho přepíše na `python3`. Bez něj nefunguje nahrávání po `Ctrl+S` ani tlačítka panelu.
 
-Instalační skript ověří Python 3 a pip, nainstaluje nástroj **`mpremote`** (komunikace s deskou, obsahuje i `pyserial`) a **`matplotlib`** (graf hodnot), rozšíření **MicroPython & CircuitPython Panel** a nastaví ovládací tlačítka v editoru. Na konci vypíše, jaké desky jsou připojené.
+Instalační skript ověří Python 3 (na Windows ho v případě potřeby nainstaluje) a ve složce projektu vytvoří virtuální prostředí **`.venv`**. Do něj nainstaluje nástroj **`mpremote`** (komunikace s deskou, obsahuje i `pyserial`) a **`matplotlib`** (graf hodnot). Dál nainstaluje rozšíření **MicroPython & CircuitPython Panel** a nastaví ovládací tlačítka v editoru. Na konci vypíše, jaké desky jsou připojené.
+
+> 💡 Když `setup.bat` právě nainstaloval Python, **zavřete VS Code a otevřete ho znovu**. Jinak editor nový Python nenajde a tlačítka panelu nefungují.
 
 ---
 

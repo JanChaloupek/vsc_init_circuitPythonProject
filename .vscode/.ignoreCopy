@@ -46,6 +46,10 @@ pyrightconfig.json
 _backups/*
 _backups/**
 
+# Python knihovny projektu (skryta slozka, nenahrava se i bez tohoto radku)
+.venv/*
+.venv/**
+
 # Slozka .vscode (je skryta, takze se nenahrava i bez tohoto radku)
 .vscode/*
 .vscode/**

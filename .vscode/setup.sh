@@ -6,9 +6,9 @@
 #   Kompletni jednorazova priprava vyvojoveho prostredi
 #   pro MicroPython i CircuitPython ve VS Code na Linuxu a macOS:
 #     1) Kontrola Pythonu 3
-#     2) Kontrola balickovaciho nastroje pip
-#     3) Instalace Python knihoven: mpremote (MicroPython, obsahuje
-#        i pyserial) a matplotlib (graf hodnot: mpy plot / cpy plot)
+#     2) Virtualni prostredi .venv v koreni projektu
+#     3) Instalace Python knihoven do .venv: mpremote (MicroPython,
+#        obsahuje i pyserial) a matplotlib (graf: mpy plot / cpy plot)
 #     4) Detekce VS Code CLI
 #     5) Instalace rozsireni MicroPython & CircuitPython Panel (.vsix)
 #     6) Hromadna instalace rozsireni z Marketplace
@@ -17,17 +17,25 @@
 #        definovana jen tam, stejne pro Windows i Linux/macOS)
 #     8) Kontrola pripojenych desek (.vscode/deska.py devices)
 #
+# Knihovny jdou do .venv (jen pro tento projekt). Novejsi Linuxy
+# (Ubuntu 23.04+, Debian 12+) instalaci pres pip mimo virtualni
+# prostredi odmitaji (chyba externally-managed-environment, PEP 668).
+# deska.py si .venv najde sam, prikazy v settings.json proto
+# zustavaji "python3 .vscode/deska.py ...".
+#
 # Vsechny ostatni nastroje (mpy, cpy) jsou v jedinem souboru
 # .vscode/deska.py. Tento skript zustava v bashi, protoze musi
 # umet zkontrolovat i samotny Python.
 # ------------------------------------------------------------
 SCRIPT_NAME="setup.sh"
-SCRIPT_VERSION="3.0"
+SCRIPT_VERSION="3.2"
 SCRIPT_DATE="2026-11-26"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DESKA_PY="$SCRIPT_DIR/deska.py"
+VENV_DIR="$PROJECT_ROOT/.venv"
+VENV_PY="$VENV_DIR/bin/python"
 
 echo "============================================================"
 echo "  $SCRIPT_NAME - verze: $SCRIPT_VERSION ($SCRIPT_DATE)"
@@ -49,7 +57,7 @@ if ! command -v python3 &>/dev/null; then
         PY="python"
     else
         echo "ERROR: Python 3 nenalezen."
-        echo "  Na Ubuntu/Debian nainstalujte: sudo apt install python3 python3-pip"
+        echo "  Na Ubuntu/Debian nainstalujte: sudo apt install python3 python3-venv"
         echo "  Na macOS nainstalujte: brew install python"
         exit 1
     fi
@@ -59,45 +67,57 @@ echo "Python OK ($PY_VER)"
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 2) Check pip
+# 2) Virtualni prostredi .venv
 # ------------------------------------------------------------
-echo "[2/8] Kontrola balickovaciho nastroje pip..."
-$PY -m pip --version &>/dev/null
-if [ $? -ne 0 ]; then
-    echo "pip nenalezen. Zkousim ensurepip..."
-    $PY -m ensurepip --default-pip
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Instalace pip selhala."
-        echo "  Na Ubuntu/Debian: sudo apt install python3-pip"
+echo "[2/8] Virtualni prostredi .venv (knihovny jen pro tento projekt)..."
+if [ -x "$VENV_PY" ] && "$VENV_PY" -m pip --version &>/dev/null; then
+    echo ".venv OK"
+else
+    if [ -e "$VENV_DIR" ]; then
+        # Napr. Python, ze ktereho .venv vzniklo, byl aktualizovan/odinstalovan,
+        # nebo predchozi pokus skoncil chybou (chybejici python3-venv).
+        echo "Stavajici .venv nefunguje, vytvarim ho znovu..."
+        rm -rf "$VENV_DIR"
+    fi
+    echo "Vytvarim $VENV_DIR ..."
+    if ! $PY -m venv "$VENV_DIR" || ! "$VENV_PY" -m pip --version &>/dev/null; then
+        rm -rf "$VENV_DIR"
+        echo "ERROR: Vytvoreni .venv selhalo."
+        echo "  Na Ubuntu/Debian nainstalujte: sudo apt install python3-venv"
+        echo "  (pripadne python3.X-venv podle verze: $($PY --version 2>&1))"
+        echo "  a spustte ./setup.sh znovu."
         exit 1
     fi
+    echo ".venv vytvoreno."
 fi
-echo "pip OK"
 echo "--------------------------------------"
 
 # ------------------------------------------------------------
-# 3) Check mpremote
+# 3) Python knihovny do .venv
 # ------------------------------------------------------------
-echo "[3/8] Kontrola Python knihoven (mpremote, matplotlib)..."
-$PY -m mpremote --help &>/dev/null
-if [ $? -ne 0 ]; then
+echo "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib)..."
+if "$VENV_PY" -c "import mpremote, serial" &>/dev/null; then
+    echo "mpremote OK"
+else
     echo "mpremote nenalezen. Instaluji pres pip..."
-    $PY -m pip install mpremote
-    if [ $? -ne 0 ]; then
+    if ! "$VENV_PY" -m pip install --disable-pip-version-check mpremote; then
         echo "ERROR: Instalace mpremote selhala."
         exit 1
     fi
+    echo "mpremote uspesne nainstalovan."
 fi
-echo "mpremote OK"
 
 # matplotlib je potreba jen pro graf (mpy plot / cpy plot)
-if ! $PY -c "import matplotlib" &>/dev/null; then
+if "$VENV_PY" -c "import matplotlib" &>/dev/null; then
+    echo "matplotlib OK"
+else
     echo "matplotlib (graf) nenalezen. Instaluji pres pip..."
-    if ! $PY -m pip install matplotlib; then
+    if "$VENV_PY" -m pip install --disable-pip-version-check matplotlib; then
+        echo "matplotlib uspesne nainstalovan."
+    else
         echo "Instalace matplotlib selhala (graf nebude fungovat, ostatni ano)."
     fi
 fi
-echo "matplotlib OK"
 echo "--------------------------------------"
 
 # ------------------------------------------------------------

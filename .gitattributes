@@ -1,2 +1,8 @@
 # Shell skripty musi mit na Linuxu a macOS konce radku LF, jinak bash hlasi chyby.
 *.sh text eol=lf
+
+# Skripty pro Windows musi mit konce radku CRLF. S LF cmd.exe u souboru
+# s ceskymi znaky nebo skoky (goto) cte radky posunute a hlasi nesmysly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
