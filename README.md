@@ -1,9 +1,9 @@
 # Počáteční pracovní adresář pro projekt ve VS Code s Pico:ed (CircuitPython & MicroPython)
 
 Podrobné návody:
-- 📘 **[Návod: Práce s MicroPythonem (GUI & CLI)](MicroPython.md)**
-- 📙 **[Návod: Práce s CircuitPythonem (GUI & CLI)](CircuitPython.md)**
-- 🔧 **[Jak fungují nástroje mpy a cpy (pro zvědavé a pro správce projektu)](Nastroje.md)**
+- 📘 **[Návod: Práce s MicroPythonem (GUI & CLI)](docs/MicroPython.md)**
+- 📙 **[Návod: Práce s CircuitPythonem (GUI & CLI)](docs/CircuitPython.md)**
+- 🔧 **[Jak fungují nástroje mpy a cpy (pro zvědavé a pro správce projektu)](docs/Nastroje.md)**
 
 Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **CircuitPythonu** (desky Pico:ed v1 a v2) i **MicroPythonu** (Pico:ed v2, BBC micro:bit a Raspberry Pi Pico) v editoru **Visual Studio Code**.
 
@@ -15,6 +15,8 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
    > ⚠️ **Na Linuxu a macOS je `./setup.sh` povinný.** Nastavení v `.vscode/settings.json` je připravené pro Windows a spouští nástroje příkazem `python`. Na Linuxu a macOS se Python 3 obvykle jmenuje `python3` a příkaz `python` neexistuje. `./setup.sh` nastavení přepíše na `python3`. Bez něj **nefunguje automatické nahrávání po `Ctrl+S`** ani tlačítka panelu. V panelu *Output* → *Run On Save* pak uvidíte chybu `python: command not found` (nebo `not found`).
    >
    > Po změně v `settings.json` (vlastní úprava, `git pull`) stačí znovu spustit `./setup.sh`, případně jen `python3 .vscode/deska.py vscode`.
+   >
+   > Když `./setup.sh` hlásí `Permission denied`, spusťte ho jako **`bash setup.sh`**. Stává se to, když se projekt rozbalil na Windows a pak zkopíroval, nebo leží na flashce či disku s FAT/NTFS. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`.
 3. Připojte desku **datovým** USB kabelem a v terminálu (`Ctrl+~`) zjistěte, co je připojené:
    ```powershell
    .\cpy devices          # Windows PowerShell (na Linuxu: ./cpy.sh devices)
@@ -29,13 +31,13 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 |---|---|
 | **`code.py`** | výchozí program pro **CircuitPython** (blikání LED, nápis na displeji) |
 | **`main.py`** | výchozí program pro **MicroPython** |
+| **`docs/`** | podrobné návody: `CircuitPython.md`, `MicroPython.md`, `Nastroje.md` (na desku se nenahrávají) |
 | **`lib/`** | knihovny pro desku; `picoed_v2_lib/` je knihovna pro Pico:ed v2 s MicroPythonem (displej, tlačítka, LED, bzučák, ultrazvuk) |
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
 | **`cpy.cmd`** / **`cpy.sh`** | spouštěč nástroje **`cpy`** pro CircuitPython |
 | **`_fake/`** | simulace hardwaru (`board`, `picoed`, `pwmio`, `digitalio`, `neopixel`, `time`, ...) – kód jde spustit na PC bez robota |
 | **`_stubs/`** | typové stuby pro nápovědu (IntelliSense) ve VS Code |
-| **`pyrightconfig.json`** | nastavení analyzátoru Pylance/Pyright (nápověda bez falešných chyb) |
 | **`.gitignore`** | co se neukládá do gitu |
 | **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
 

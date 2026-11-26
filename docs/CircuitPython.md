@@ -279,7 +279,7 @@ Desky Pico:ed mají základní funkce v modulu `picoed`. Pokud potřebujete při
   ```bash
   python code.py
   ```
-- Složka **`_stubs/`** v kombinaci s `pyrightconfig.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
+- Složka **`_stubs/`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
 
 ---
 
@@ -292,6 +292,7 @@ Desky Pico:ed mají základní funkce v modulu `picoed`. Pokud potřebujete při
 | **Kód se neustále restartuje ve smyčce** | Ve VS Code je zapnuté automatické ukládání s příliš krátkým intervalem. | Vypněte v nastavení VS Code volbu `files.autoSave` a ukládejte kód manuálně klávesami `Ctrl+S`. |
 | **`NameError: name '\ufeff' is not defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `cpy` značku při kopírování odstraní sám a upozorní na to. Natrvalo: ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8`. |
 | **Linux/macOS: po `Ctrl+S` chyba `python: command not found`** | Nespustili jste `./setup.sh`. Nastavení je pro Windows (`python`), na Linuxu a macOS je potřeba `python3`. | Spusťte v terminálu `./setup.sh`, nebo jen `python3 .vscode/deska.py vscode`. Pak okno VS Code znovu načtěte (`Ctrl+Shift+P` → *Reload Window*). |
+| **Linux/macOS: `./setup.sh` hlásí `Permission denied`** | Skript nemá příznak spustitelnosti (projekt rozbalený na Windows, na flashce nebo disku s FAT/NTFS). | Spusťte ho jako `bash setup.sh`. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`. |
 | **`Port COM5 nelze otevřít`** | Port drží jiný program (Serial Monitor, otevřený REPL, graf, Thonny). | Zavřete ho (Serial Monitor odpojte) a příkaz zopakujte. |
 | **Po nahrání se program nespustil** | Program vypnul autoreload (`supervisor.runtime.autoreload = False`), nebo je deska v nouzovém režimu. | `cpy check` ukáže příčinu; program spustíte `cpy reset`, nahrávat můžete s `cpy upload --stop`. |
 | **Ctrl+S nic nenahraje** | Soubor je v `.vscode/.ignoreCopy`, obsah na desce je stejný, nebo není připojený disk `CIRCUITPY`. | Panel *Output* → *Run On Save*: výpis po krocích ukáže, kde se kopírování zastavilo (`ERROR: v kroku N …` nebo `Konec: …`). Když v panelu není nic, Run on Save se vůbec nespustil – zkontrolujte, že je nainstalované rozšíření *Run on Save* a že má soubor příponu `.py`, `.toml`, `.json`, `.txt` nebo `.csv`. |

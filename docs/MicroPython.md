@@ -286,7 +286,7 @@ Chcete-li do robota nahrát další modul (např. `motory.py` nebo `nastaveni.js
   ```bash
   python main.py
   ```
-- Složka **`_stubs/`** v kombinaci s `pyrightconfig.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance).
+- Složka **`_stubs/`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance).
 
 ---
 
@@ -296,7 +296,8 @@ Chcete-li do robota nahrát další modul (např. `motory.py` nebo `nastaveni.js
 |---|---|---|
 | **ERROR: Zarizeni nereaguje / Port je uzamcen** | Port drží otevřený jiný proces (REPL v jiném okně, Thonny apod.). | Zavřete všechny panely terminálu ve VS Code tlačítkem koše. Odpojte a znovu připojte USB kabel. |
 | **Deska zamrzla v nekonečném cyklu while True** | Smyčka běží bez `time.sleep()`, mikrokontrolér nestíhá obsluhu USB. | Otevřete REPL a stiskněte opakovaně `Ctrl+C`. Poté spusťte `mpy wipe`. |
-| **mpremote: command not found** | Python nebo mpremote chybí v systémové cestě PATH. | Spusťte znovu `setup.bat` (nebo `setup.sh`), který prostředí zkontroluje a nastaví. |
+| **`ERROR: Chybi knihovna mpremote`** | Knihovny nejsou ve virtuálním prostředí `.venv` projektu (setup ještě neproběhl, nebo se `.venv` smazalo). | Spusťte znovu `setup.bat` (nebo `./setup.sh`), který prostředí zkontroluje a nastaví. |
+| **Linux/macOS: `./setup.sh` hlásí `Permission denied`** | Skript nemá příznak spustitelnosti (projekt rozbalený na Windows, na flashce nebo disku s FAT/NTFS). | Spusťte ho jako `bash setup.sh`. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`. |
 | **`NameError: name '\ufeff...' isn't defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `mpy upload` na to upozorní. Ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8` a nahrajte znovu. |
 | **Po nahrání se nic neděje** | MicroPython po nahrání program nespouští. | Spusťte ho: `mpy reset` (nebo tlačítko RESET). |
 | **MicroPython deska nenalezena** | Deska není připojená datovým kabelem, nebo je na ní CircuitPython. | `mpy devices` ukáže, co je připojené; na CircuitPython použijte `cpy`. |

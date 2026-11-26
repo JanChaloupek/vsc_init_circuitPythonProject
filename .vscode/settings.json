@@ -115,7 +115,9 @@
         "zaroluje",
         "numpy",
         "setupu",
-        "venv"
+        "venv",
+        "NTFS",
+        "flashce"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"

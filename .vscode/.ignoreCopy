@@ -40,7 +40,10 @@ run_coverage.py
 *.sh
 *.ps1
 *.code-workspace
-pyrightconfig.json
+
+# Navody pro studenty (obrazky a dalsi soubory, *.md je vyse)
+docs/*
+docs/**
 
 # Zalohy
 _backups/*
