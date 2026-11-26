@@ -42,7 +42,7 @@
 #   ODDIL 4  Seriova konzole desky (REPL a raw REPL)
 #   ODDIL 5  Soubory projektu (.ignoreCopy) a stromovy vypis
 #   ODDIL 6  Spolecne prikazy (devices, vscode, graf)
-#   ODDIL 7  CircuitPython - prikazy cpy
+#   ODDIL 7  CircuitPython - prikazy cpy (vcetne sim a test na PC)
 #   ODDIL 8  MicroPython - prikazy mpy
 #   ODDIL 9  Napoveda, cteni parametru a hlavni funkce
 #
@@ -2137,6 +2137,109 @@ def cp_flash(board, opts):
         raise CpyError("Deska zustala v bootloaderu - je soubor .uf2 urceny pro tuto desku?")
 
 
+# --- Simulace a testy na PC (cpy sim, cpy test) -------------
+# Bez desky: misto modulu board, digitalio, picoed, time, ... se nactou
+# falesne verze z pc/_fake. Stejny model hardwaru slouzi dvema rezimum
+# (pc/_fake/_rezim.py):
+#   test - cas sam neplyne (time.sleep ho jen posune), nic se nevypisuje,
+#          test na konci kontroluje ulozeny stav (napr. led.state_history)
+#   sim  - cas bezi skutecne a pc/simulace/konzole.py vypisuje zmeny
+#          (LED, displej, bzucak) a cte klavesy (tlacitka A/B)
+PC_DIR = PROJECT / "pc"
+# Poradi je dulezite (stejne jako run_test.py v 3-SW_GIT): falesny time
+# potrebuje adafruit_ticks, picoed potrebuje board, digitalio a busio.
+FAKE_MODULES = ["adafruit_ticks", "time", "board", "digitalio", "analogio",
+                "busio", "pwmio", "neopixel", "picoed"]
+
+
+def pc_hardware(rezim):
+    """Pripravi falesny hardware z pc/_fake a vrati modul _rezim."""
+    import importlib
+    if not (PC_DIR / "_fake").is_dir():
+        raise CpyError(f"Chybi slozka {PC_DIR / '_fake'} s falesnym hardwarem.")
+    # Hledani modulu: program studenta a jeho moduly (koren projektu),
+    # knihovny (lib/, jako /lib na desce), pc/ (_fake, tests, simulace)
+    for p in (PC_DIR, PROJECT / "lib", PROJECT):
+        if str(p) not in sys.path:
+            sys.path.insert(0, str(p))
+    rezim_modul = importlib.import_module("_fake._rezim")
+    rezim_modul.nastav(rezim)
+    for name in FAKE_MODULES:
+        sys.modules[name] = importlib.import_module("_fake." + name)
+    return rezim_modul
+
+
+def cp_sim(board, opts):
+    """Simulace programu (code.py) na PC s falesnym hardwarem."""
+    import runpy
+    import traceback
+    rel = opts.args[0] if opts.args else CP_ENTRY
+    program = PROJECT / rel
+    if not program.is_file():
+        raise CpyError(f"Soubor {rel} nenalezen.")
+    rezim = pc_hardware("sim")
+    from simulace import konzole
+    klavesy = konzole.spust(rezim)
+    say(f"Simulace {rel} na PC (falesny hardware z pc/_fake, deska se nepouziva).", "info")
+    say("   Klavesy: a / b = tlacitko A / B, q nebo Ctrl+C = konec." if klavesy
+        else "   Konec: Ctrl+C. (Klavesy a/b nefunguji - vstup neni terminal.)")
+    line()
+    try:
+        runpy.run_path(str(program), run_name="__main__")
+        say("Program skoncil.", "done")
+        return 0
+    except KeyboardInterrupt:
+        say()
+        say("Simulace ukoncena.", "done")
+        return 0
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else 0
+    except Exception:
+        say()
+        say(col("ERROR", "error") + f": chyba v programu {rel}:")
+        # Jen radky z programu studenta, ne z deska.py
+        tb = traceback.extract_tb(sys.exc_info()[2])
+        tb = [f for f in tb if Path(f.filename).resolve() != Path(__file__).resolve()
+              and "runpy" not in Path(f.filename).name]
+        print("".join(traceback.format_list(tb)), end="")
+        print(traceback.format_exc().strip().splitlines()[-1])
+        return 1
+    finally:
+        konzole.zastav()
+
+
+def cp_test(board, opts):
+    """Unit testy z pc/tests na PC s falesnym hardwarem."""
+    import unittest             # driv nez falesny time (unittest si bere skutecny)
+    tests_dir = PC_DIR / "tests"
+    if not tests_dir.is_dir():
+        raise CpyError(f"Chybi slozka {tests_dir} s testy.")
+    pattern = opts.args[0] if opts.args else "test*.py"
+    if not pattern.endswith(".py"):
+        pattern += "*.py" if not pattern.endswith("*") else ".py"
+    pc_hardware("test")
+    ticks = sys.modules["adafruit_ticks"]
+
+    class Vysledek(unittest.TextTestResult):
+        def startTest(self, test):
+            ticks.set_ticks_ms(0)       # kazdy test zacina v case 0
+            super().startTest(test)
+
+    suite = unittest.TestLoader().discover(str(tests_dir), pattern=pattern, top_level_dir=str(PC_DIR))
+    if suite.countTestCases() == 0:
+        raise CpyError(f"V {tests_dir} nejsou zadne testy odpovidajici vzoru {pattern}.")
+    say(f"Testy z pc/tests (vzor {pattern}) na PC s falesnym hardwarem:", "info")
+    line()
+    vysledek = unittest.TextTestRunner(verbosity=2, resultclass=Vysledek, stream=sys.stdout).run(suite)
+    line()
+    if vysledek.wasSuccessful():
+        say(f"Vsechny testy prosly ({vysledek.testsRun}).", "done")
+        return 0
+    say(col("ERROR", "error") + f": neproslo {len(vysledek.failures) + len(vysledek.errors)} "
+        f"z {vysledek.testsRun} testu.")
+    return 1
+
+
 # ============================================================
 # ODDIL 8  MicroPython - prikazy mpy
 # ============================================================
@@ -2725,6 +2828,11 @@ Jen pro CircuitPython:
   bootloader            prepne desku do rezimu BOOTSEL (disk RPI-RP2)
   flash <soubor.uf2>    nahraje firmware do desky
 
+Na PC bez desky (falesny hardware z pc/_fake):
+  sim [soubor]          simulace programu (code.py): vypisuje LED, displej, bzucak;
+                        klavesy a / b = tlacitko A / B, q = konec
+  test [vzor]           unit testy z pc/tests (jen soubory podle vzoru, napr. test_code)
+
 Volby:
   --port COMx           seriovy port desky (jinak automaticky; promenna CIRCUITPY_PORT)
   --drive F:            disk desky (jinak automaticky; promenna CIRCUITPY_PATH)
@@ -2764,6 +2872,8 @@ CPY_COMMANDS = {
     "open": (cp_open, set()),
     "bootloader": (cp_bootloader, set()),
     "flash": (cp_flash, set()),
+    "sim": (cp_sim, set()),
+    "test": (cp_test, set()),
 }
 MPY_COMMANDS = {
     "upload": (mp_upload, set()),

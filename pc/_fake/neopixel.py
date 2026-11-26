@@ -3,9 +3,16 @@ Fake implementace CircuitPython knihovny `neopixel`.
 
 Simuluje adresovatelné RGB/RGBW LED pro vývoj a testování na PC.
 Chování je deterministické a ukládá barvy do Python seznamu.
+Zápis do LED (show) oznamuje režimu (_rezim.oznam) - v simulaci ho
+konzole vypíše, v testu to nic nedělá.
 """
 
 import digitalio
+
+try:
+    from . import _rezim        # nacteno jako balicek _fake (cpy test / cpy sim / run_test.py)
+except ImportError:
+    import _rezim               # nacteno primo ze slozky _fake
 
 # ---------------------------------------------------------
 # Pixel order constants (kompatibilní s CircuitPython API)
@@ -100,6 +107,7 @@ class _PixelBuf:
             - testy mohou ověřit, že došlo k zápisu
         """
         self.write_called = True
+        _rezim.oznam("neopixel", "pixely", list(self._pixels))
 
 
 # ---------------------------------------------------------

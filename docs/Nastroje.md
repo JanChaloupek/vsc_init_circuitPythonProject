@@ -227,7 +227,53 @@ Hotové kroky lze sdílet: `cp_step_drive()` (disk CIRCUITPY), `cp_step_port()` 
 
 ---
 
-## 10. Na čem bylo ověřeno
+## 10. Simulace a testy na PC (složka `pc/`)
+
+Všechno, co běží jen na počítači, je ve složce **`pc/`** (na desku se nenahrává – v `.ignoreCopy` je `pc/**`):
+
+| Složka | Co obsahuje |
+|---|---|
+| `pc/_fake` | **falešný hardware** – moduly `board`, `digitalio`, `picoed`, `time`, `adafruit_ticks`, `busio`, `pwmio`, `neopixel`, `analogio`. Jediný model hardwaru pro testy i simulaci. |
+| `pc/_stubs` | typové definice pro nápovědu Pylance (jen pro editor, za běhu se nepoužívají) |
+| `pc/tests` | unit testy (`test_*.py`) |
+| `pc/simulace` | jen pro simulaci: `konzole.py` vypisuje změny hardwaru a čte klávesy; později sem může přibýt „svět“ robota (trať pod senzory čáry) |
+
+### Jeden falešný hardware, dva režimy
+
+Příkazy `cpy sim` a `cpy test` (v `deska.py`, funkce `pc_hardware()`) zaregistrují moduly z `pc/_fake` místo skutečných (`sys.modules["board"] = _fake.board`, …) a přepnou režim v `pc/_fake/_rezim.py`:
+
+| | `cpy test` (režim `test`) | `cpy sim` (režim `sim`) |
+|---|---|---|
+| Čas | stojí; `time.sleep()` / `adafruit_ticks.advance_ticks()` ho jen posunou, před každým testem se vynuluje | běží podle skutečných hodin; `time.sleep(1)` opravdu čeká |
+| Výstup | nic | změny hardwaru vypisuje `pc/simulace/konzole.py` |
+| Vstupy | test je nastaví v kódu (`picoed.button_a.set_pressed(True)`) | klávesy `a` / `b` (tlačítko drží 0,5 s) |
+| Kontrola | test čte uložený stav (`led.state_history`, `write_history`, `music.history`, …) | člověk čte výpis |
+
+Falešné moduly samy nic nevypisují. Při každé změně jen zavolají `_rezim.oznam(co, kdo, hodnota)` – v testu nikdo neposlouchá, v simulaci posluchač z `konzole.py` změnu vypíše:
+
+```
+     test (pc/tests)  ──▶ ┐                             ┌ nic
+                          ├─▶ pc/_fake (model) ─ oznam ─┤
+     cpy sim          ──▶ ┘                             └ pc/simulace/konzole.py → výpis
+```
+
+Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes stejný kód falešného hardwaru.
+
+### Pořadí a hledání modulů
+
+- Moduly se registrují v pořadí `adafruit_ticks`, `time`, `board`, `digitalio`, `analogio`, `busio`, `pwmio`, `neopixel`, `picoed` (falešný `time` potřebuje `adafruit_ticks`, `picoed` potřebuje `board`, `digitalio` a `busio`).
+- Do cesty pro import se přidá kořen projektu (program studenta a jeho moduly), `lib/` (jako `/lib` na desce) a `pc/` (`_fake`, `tests`, `simulace`).
+- Testy tak mohou psát `import picoed`, `import _fake.adafruit_ticks as fake_ticks` i `from tests.create import ...` – stejně jako v projektu `3-SW_GIT`, jehož 115 testů projde přes `cpy test` beze změny (místo jeho `run_test.py`).
+
+### Jak dál
+
+- **Scénáře:** sled vstupů v čase („ve 2. s stiskni A, senzor čáry vlevo = 1“) – v simulaci přehrát živě, v testu okamžitě a pak zkontrolovat stav.
+- **Svět robota:** poloha JoyCaru a trať v `pc/simulace`, která nastavuje hodnoty falešných senzorů (přes `busio.I2C` a registry expandéru).
+- **MicroPython:** falešné `machine.Pin` / `machine.I2C`, aby šly simulovat a testovat i programy pro `mpy`.
+
+---
+
+## 11. Na čem bylo ověřeno
 
 | Co | Verze |
 |---|---|

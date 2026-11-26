@@ -21,13 +21,12 @@ main.py
 lib/picoed_v2_lib/*
 lib/picoed_v2_lib/**
 
-# Napoveda pro editor a simulace hardwaru pro PC
-_stubs/*
-_stubs/**
-_fake/*
-_fake/**
+# Vse, co bezi jen na PC: falesny hardware (pc/_fake), napoveda pro editor
+# (pc/_stubs), testy (pc/tests) a simulace (pc/simulace)
+pc/*
+pc/**
 
-# Testy, ktere bezi na PC
+# Testy a jejich spoustece ve stylu starsich projektu (kdyby se objevily v koreni)
 tests/*
 tests/**
 run_test.py

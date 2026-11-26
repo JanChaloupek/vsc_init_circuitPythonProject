@@ -8,7 +8,15 @@ Fake implementace CircuitPython modulu `digitalio`.
 Simuluje digitální piny (GPIO) pro vývoj a testování na PC.
 Chování je deterministické a ukládá historii změn, aby bylo možné
 psát přesné unit testy bez skutečného hardware.
+
+Změnu hodnoty pinu oznamuje režimu (_rezim.oznam) - v simulaci ji
+konzole vypíše (např. LED), v testu to nic nedělá.
 """
+
+try:
+    from . import _rezim        # nacteno jako balicek _fake (cpy test / cpy sim / run_test.py)
+except ImportError:
+    import _rezim               # nacteno primo ze slozky _fake
 
 class Direction:
     """
@@ -53,8 +61,19 @@ class DigitalInOut:
         self.pin = pin
         self.direction = None
         self.pull = None
-        self.value = False
+        self._value = False
         self.write_history = []
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        zmena = value != self._value
+        self._value = value
+        if zmena:
+            _rezim.oznam("pin", getattr(self.pin, "name", str(self.pin)), value)
 
     def switch_to_output(self, value=False):
         """

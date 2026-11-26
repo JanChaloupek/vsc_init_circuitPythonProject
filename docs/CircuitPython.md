@@ -34,7 +34,7 @@ Soubor **`code.py`** v kořeni projektu je **hlavním spouštěným skriptem pro
 - Importuje vestavěný modul `picoed` (`from picoed import led, display`).
 - Zaroluje na 17×7 matici uvítací nápis `"ZSaPR"`.
 - V hlavní smyčce `while True:` v intervalu 1 s přepíná stavovou LED diodu (`led.toggle()`).
-- Pokud je kód spuštěn offline na PC bez připojené desky, bezpečně využije simulační vrstvu `_fake/` a vypisuje stav do konzole.
+- Bez desky ho vyzkoušíte v simulaci na PC: `.\cpy sim` (viz [kapitola 7](#7-simulace-a-testy-na-pc-bez-desky)).
 
 ### Možnosti rozšíření v `code.py` pro desky Pico:ed:
 ```python
@@ -115,7 +115,7 @@ Na desku patří jen to, co program potřebuje ke svému běhu. Soubor **`.vscod
 | Maska | Proč se nekopíruje |
 |---|---|
 | `main.py` | program pro MicroPython – CircuitPython by ho spustil, kdyby chyběl `code.py` |
-| `_stubs/*`, `_fake/*` | nápověda pro editor a simulace hardwaru pro PC |
+| `pc/*` | všechno, co běží jen na PC: falešný hardware, nápověda pro editor, testy, simulace |
 | `lib/picoed_v2_lib/*` | knihovna pro MicroPython (CircuitPython má modul `picoed` vestavěný) |
 | `tests/*`, `run_test.py` | testy, které běží na PC |
 | `*.md`, `*.bat`, `*.cmd`, `*.sh`, `*.ps1` | dokumentace a spouštěcí skripty |
@@ -273,13 +273,26 @@ Desky Pico:ed mají základní funkce v modulu `picoed`. Pokud potřebujete při
 
 ---
 
-## 7. Offline vývoj a simulace (`_fake` a `_stubs`)
+## 7. Simulace a testy na PC (bez desky)
 
-- Složka **`_fake/`** obsahuje simulaci modulů `picoed`, `board`, `digitalio`, `pwmio`, `neopixel` apod. Kód robota lze spustit přímo na PC bez připojené desky:
-  ```bash
-  python code.py
-  ```
-- Složka **`_stubs/`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
+Moduly desky (`board`, `digitalio`, `picoed`, `pwmio`, `neopixel`, `time`, …) mají ve složce **`pc/_fake`** falešné verze. Stejný falešný hardware používají dva příkazy:
+
+| Příkaz | Co dělá |
+|---|---|
+| **`.\cpy sim`** | spustí `code.py` (nebo jiný soubor: `.\cpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák, NeoPixel. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
+| **`.\cpy test`** | spustí unit testy z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
+
+Ukázka simulace výchozího `code.py`:
+```text
+Spusteno code.py (CircuitPython na ELECFREAKS Pico:ed (v1 / v2))
+[     0.01 s] Displej: text "ZSaPR"
+[     0.01 s] LED: ZAPNUTO (*)
+[     1.01 s] LED: vypnuto ( )
+```
+
+Ukázkový test je v `pc/tests/test_code_py.py`; nové testy přidávejte do stejné složky (soubory `test_*.py`).
+
+Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` zajišťuje plnohodnotné doplňování kódu (IntelliSense) bez falešných chyb v editoru.
 
 ---
 

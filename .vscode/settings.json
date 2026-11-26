@@ -4,11 +4,11 @@
         "reportMissingModuleSource": "none",
         "reportShadowedImports": "none"
     },
-    "python.analysis.stubPath": "_stubs",
+    "python.analysis.stubPath": "pc/_stubs",
     "python.analysis.extraPaths": [
         "./lib",
-        "./_stubs",
-        "./_fake"
+        "./pc/_stubs",
+        "./pc"
     ],
     "python.terminal.activateEnvironment": false,
     "python-envs.terminal.autoActivationType": "off",
@@ -117,7 +117,13 @@
         "setupu",
         "venv",
         "NTFS",
-        "flashce"
+        "flashce",
+        "Enteru",
+        "TCSADRAIN",
+        "getwch",
+        "kbhit",
+        "tcgetattr",
+        "tcsetattr"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"

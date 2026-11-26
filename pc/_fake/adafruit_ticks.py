@@ -6,8 +6,15 @@ Fake implementace modulu adafruit_ticks pro testy a vývoj na PC.
 Simuluje monotónní časovač CircuitPythonu:
 - ticks_ms() vrací řízený simulovaný čas
 - ticks_add() a ticks_diff() fungují stejně jako v MicroPythonu
-- čas se neposouvá automaticky, testy jej řídí ručně
+- v testu (_rezim "test") se čas neposouvá automaticky, testy jej řídí ručně
+- v simulaci (_rezim "sim") čas běží podle skutečných hodin a
+  advance_ticks() (tedy i time.sleep) opravdu čeká
 """
+
+try:
+    from . import _rezim        # nacteno jako balicek _fake (cpy test / cpy sim / run_test.py)
+except ImportError:
+    import _rezim               # nacteno primo ze slozky _fake
 
 # Konstanty převzaté z MicroPythonu
 _TICKS_PERIOD = 1 << 29
@@ -16,10 +23,14 @@ _TICKS_HALFPERIOD = _TICKS_PERIOD // 2
 
 # Interní simulovaný čas (v milisekundách)
 _fake_ticks = 0
+# Posun skutečného času v simulaci (set_ticks_ms v režimu "sim")
+_sim_offset = 0
 
 
 def ticks_ms() -> int:
     """Vrací aktuální simulovaný čas v milisekundách."""
+    if _rezim.je_simulace():
+        return (_rezim.realny_cas_ms() + _sim_offset) % _TICKS_PERIOD
     return _fake_ticks
 
 
@@ -46,11 +57,18 @@ def ticks_less(ticks1: int, ticks2: int) -> bool:
 
 def set_ticks_ms(value: int) -> None:
     """Nastaví simulovaný čas v milisekundách."""
-    global _fake_ticks
+    global _fake_ticks, _sim_offset
     _fake_ticks = int(value)
+    if _rezim.je_simulace():
+        _sim_offset = int(value) - _rezim.realny_cas_ms()
 
 
 def advance_ticks(delta: int) -> None:
-    """Posune simulovaný čas o delta milisekund."""
+    """Posune simulovaný čas o delta milisekund.
+
+    V simulaci čas běží sám - tady se proto skutečně čeká."""
     global _fake_ticks
+    if _rezim.je_simulace():
+        _rezim.realne_cekej(int(delta) / 1000)
+        return
     _fake_ticks = (_fake_ticks + int(delta)) % _TICKS_PERIOD

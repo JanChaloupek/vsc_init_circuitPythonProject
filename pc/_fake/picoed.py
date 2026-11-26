@@ -9,11 +9,18 @@ Simuluje:
 - hudební výstup
 
 Vše je deterministické a vhodné pro unit testy.
+Změny (displej, tlačítka, bzučák) oznamuje režimu (_rezim.oznam) -
+v simulaci je konzole vypíše, v testu to nic nedělá.
 """
 
 import busio
 import board
 import digitalio
+
+try:
+    from . import _rezim        # nacteno jako balicek _fake (cpy test / cpy sim / run_test.py)
+except ImportError:
+    import _rezim               # nacteno primo ze slozky _fake
 
 
 # ---------------------------------------------------------
@@ -85,10 +92,14 @@ class Display:
             y = 7 - y
         return x * 16 + y
 
-    def clear(self):
+    def _clear(self):
         for y in range(self.height):
             for x in range(self.width):
                 self.buffer[y][x] = 0
+
+    def clear(self):
+        self._clear()
+        _rezim.oznam("displej", "obraz", [row[:] for row in self.buffer])
 
     def _set_pixel(self, x, y, brightness):
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -97,6 +108,7 @@ class Display:
     def scroll(self, value, brightness=30):
         self.last_scrolled = str(value)
         self.last_brightness = max(0, min(255, int(brightness)))
+        _rezim.oznam("displej", "scroll", self.last_scrolled)
 
     def show(self, value, brightness=30):
         b = max(0, min(255, int(brightness)))
@@ -112,11 +124,13 @@ class Display:
                 for y in range(self.height):
                     bit = (col >> y) & 1
                     self._set_pixel(x, y, b if bit else 0)
+            _rezim.oznam("displej", "obraz", [row[:] for row in self.buffer])
 
         else:
-            self.clear()
+            self._clear()
             for x, y, v in value:
                 self._set_pixel(x, y, int(v * 255 / 9))
+            _rezim.oznam("displej", "obraz", [row[:] for row in self.buffer])
 
 
 # ---------------------------------------------------------
@@ -175,6 +189,7 @@ class Button:
 
     def set_pressed(self, pressed: bool):
         self._fake_value = not pressed
+        _rezim.oznam("tlacitko", getattr(self._pin.pin, "name", "?"), bool(pressed))
 
     @property
     def value(self):
@@ -207,12 +222,14 @@ class Music:
     def play(self, melody, wait=True, loop=False):
         self.history.append(("play", melody, wait, loop))
         self.playing = True
+        _rezim.oznam("bzucak", "play", melody)
 
     def pitch(self, frequency, duration=None):
         self.history.append(("pitch", frequency, duration))
         self.last_frequency = frequency
         self.last_duration = duration
         self.playing = True
+        _rezim.oznam("bzucak", "pitch", (frequency, duration))
 
     def tone(self, frequency, duration=None):
         self.pitch(frequency, duration)
@@ -220,6 +237,7 @@ class Music:
     def stop(self):
         self.history.append(("stop",))
         self.playing = False
+        _rezim.oznam("bzucak", "stop", None)
 
     def reset(self):
         self.history.append(("reset",))

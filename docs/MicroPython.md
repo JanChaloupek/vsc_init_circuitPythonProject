@@ -279,14 +279,14 @@ Chcete-li do robota nahrát další modul (např. `motory.py` nebo `nastaveni.js
 
 ---
 
-## 8. Offline vývoj a simulace (`_fake` a `_stubs`)
+## 8. Běh na PC a nápověda v editoru
 
-- Složka **`_fake/`** obsahuje simulaci hardware (`board`, `picoed`, `digitalio`, `neopixel`).
-- Kód `main.py` můžete spustit přímo na počítači bez připojené desky:
+- Simulace (`cpy sim`) a testy (`cpy test`) s falešným hardwarem z `pc/_fake` jsou zatím jen pro **CircuitPython** (moduly `board`, `picoed`, …), viz `docs/CircuitPython.md`, kapitola 7. Falešné moduly MicroPythonu (`machine`, `microbit`) projekt nemá.
+- Výchozí `main.py` jde přesto spustit i na PC – když nenajde žádnou desku, vypisuje „LED“ a „displej“ do konzole:
   ```bash
   python main.py
   ```
-- Složka **`_stubs/`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance).
+- Složka **`pc/_stubs`** spolu s nastavením `python.analysis.*` v `.vscode/settings.json` poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
 
 ---
 

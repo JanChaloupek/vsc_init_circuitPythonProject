@@ -25,6 +25,17 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
    - **CircuitPython:** upravte `code.py` a stiskněte `Ctrl+S` – soubor se sám nahraje a spustí.
    - **MicroPython:** upravte `main.py` a klikněte na tlačítko **`MPY ^ Upload`** (nebo `.\mpy upload`), pak `.\mpy reset`.
 
+## Simulace a testy na PC (bez desky)
+
+Program jde vyzkoušet i bez robota. Moduly `board`, `digitalio`, `picoed`, `time`, … se nahradí falešnými verzemi ze složky `pc/_fake`:
+
+| Příkaz | Co dělá |
+|---|---|
+| **`.\cpy sim`** | spustí `code.py` (nebo jiný soubor: `.\cpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák, NeoPixel. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
+| **`.\cpy test`** | spustí unit testy z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
+
+Simulace i testy používají **stejný falešný hardware** – co ukazuje simulace, to ověřují testy. Na Linuxu a macOS: `./cpy.sh sim`, `./cpy.sh test`. Podrobnosti: [docs/Nastroje.md](docs/Nastroje.md#10-simulace-a-testy-na-pc-složka-pc).
+
 ## Obsah projektu
 
 | Soubor / složka | K čemu je |
@@ -36,8 +47,7 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
 | **`cpy.cmd`** / **`cpy.sh`** | spouštěč nástroje **`cpy`** pro CircuitPython |
-| **`_fake/`** | simulace hardwaru (`board`, `picoed`, `pwmio`, `digitalio`, `neopixel`, `time`, ...) – kód jde spustit na PC bez robota |
-| **`_stubs/`** | typové stuby pro nápovědu (IntelliSense) ve VS Code |
+| **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
 | **`.gitignore`** | co se neukládá do gitu |
 | **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
 

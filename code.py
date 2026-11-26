@@ -16,7 +16,9 @@ try:
     display = getattr(picoed, "display", None)
     board_name = "ELECFREAKS Pico:ed (v1 / v2)"
 except (ImportError, AttributeError):
-    # Fallback pro offline simulaci na PC (_fake) nebo primy pristup pres board
+    # Deska s CircuitPythonem bez modulu picoed (napr. Raspberry Pi Pico):
+    # LED pres modul board. (Simulace na PC - cpy sim - pouziva falesny
+    # picoed z pc/_fake, takze bezi vetev vyse.)
     try:
         import board
         import digitalio
@@ -31,7 +33,7 @@ except (ImportError, AttributeError):
 
         led = _FallbackLed()
         display = None
-        board_name = "Pico:ed Simulation (_fake / board)"
+        board_name = "CircuitPython deska (board.LED)"
     except Exception:
         class _ConsoleLed:
             _s = False
