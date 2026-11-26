@@ -181,7 +181,7 @@ Panel (rozšíření *MicroPython & CircuitPython Panel*, zdrojový kód v repoz
 
 | Nastavení | Co obsahuje |
 |---|---|
-| `micropython.commands` | tlačítka: `id`, `name` (text ve stavovém řádku, může mít ikonu `$(play)`), `label` (text v panelu), `command` (příkaz do terminálu), `color`, `group` (blok v panelu), `platform` (`micropython` / `circuitpython` – které desky blok ukazuje; bez připojené desky se ztlumí), `statusBar` (`false` = jen v panelu) |
+| `micropython.commands` | tlačítka: `id`, `name` (text ve stavovém řádku, může mít ikonu `$(play)`), `label` (text v panelu), `command` (příkaz do terminálu), `color`, `group` (blok v panelu), `platform` (`micropython` / `circuitpython` – které desky blok ukazuje; bez připojené desky se ztlumí; blok bez `platform` – *Na PC bez desky* – desky neukazuje a neztlumí se), `statusBar` (`false` = jen v panelu) |
 | `micropython.devicesCommand` | příkaz pro seznam připojených desek: `python .vscode/deska.py devices --json` |
 | `micropython.devicesRefreshSeconds` | jak často seznam obnovovat, když je panel vidět (výchozí 5 s) |
 | `emeraldwalk.runonsave` | Run on Save: `python .vscode/deska.py cpy save "${relativeFile}"` |
@@ -190,7 +190,7 @@ Každé tlačítko jen vloží text příkazu do terminálu `MicroPython`. Sezna
 
 Všechna tato nastavení **zapisuje příkaz `python .vscode/deska.py vscode`** (volá ho setup). Tlačítka jsou tak definovaná na jediném místě – v seznamu `PANEL_BUTTONS` v oddílu 6 souboru `deska.py`. Rozdíl mezi systémy je jen jeden: Windows volají `python`, Linux a macOS `python3`.
 
-Panel je záměrně **rychlý přístup k základním akcím** (nahrát, spustit / restartovat, konzole, smazat desku) – ne kopie všech příkazů CLI. Nevratné akce mají 8. položku `confirm` – otázku, kterou VS Code položí v dialogu; příkaz pak má `--yes`, aby se terminál neptal podruhé. Ostatní příkazy jsou v terminálu (`mpy help`, `cpy help`). Než přidáte tlačítko, zvažte, jestli ho studenti opravdu potřebují často.
+Panel je záměrně **rychlý přístup k základním akcím** (nahrát, spustit / restartovat, konzole, smazat desku; na PC simulace a testy) – ne kopie všech příkazů CLI. Nevratné akce mají 8. položku `confirm` – otázku, kterou VS Code položí v dialogu; příkaz pak má `--yes`, aby se terminál neptal podruhé. Ostatní příkazy jsou v terminálu (`mpy help`, `cpy help`). Než přidáte tlačítko, zvažte, jestli ho studenti opravdu potřebují často.
 
 **Jak přidat tlačítko** (např. zastavení programu na CircuitPythonu):
 1. V `deska.py` přidejte do `PANEL_BUTTONS` řádek (id, text ve stavovém řádku, text v panelu, příkaz `deska.py`, barva, blok, ve stavovém řádku?):

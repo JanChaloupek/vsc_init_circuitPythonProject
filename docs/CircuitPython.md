@@ -138,6 +138,8 @@ Tlačítka přidává rozšíření **MicroPython & CircuitPython Panel**. Postr
 
 Ve spodním stavovém řádku jsou s ikonami `CPY Upload` a `CPY REPL` (a jejich `MPY` protějšky). Blok **MicroPython** je pro desky s MicroPythonem (viz `MicroPython.md`). Tlačítko otevře terminál *MicroPython* a příkaz v něm spustí.
 
+Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`) a **✓ Testy** (`cpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [kapitola 7](#7-simulace-a-testy-na-pc-bez-desky).
+
 Další příkazy (výpis souborů, sledování výstupu, graf, diagnostika, …) jsou v terminálu – viz kapitola 5 a `.\cpy help`. Panel na ně odkazuje dole.
 
 ### D) Sledování výstupů (Serial Monitor)

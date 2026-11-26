@@ -85,4 +85,6 @@ Rozšíření **MicroPython & CircuitPython Panel** přidá do levého svislého
 | ⌨ Konzole (REPL) | ⌨ Konzole (REPL) | ano (`MPY REPL`, `CPY REPL`) |
 | 🗑 Smazat desku | 🗑 Smazat desku | – (před smazáním se VS Code zeptá) |
 
+Třetí blok **Na PC bez desky** má tlačítka **▶ Simulace code.py** (`cpy sim`) a **✓ Testy** (`cpy test`). Desku nepotřebuje, a proto se nikdy neztlumí. Viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky).
+
 Všechno ostatní (výpis souborů, graf, diagnostika, …) je v terminálu: `.\mpy help`, `.\cpy help`.

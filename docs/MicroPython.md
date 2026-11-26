@@ -121,7 +121,7 @@ V grafickém rozhraní VS Code je ovládání navrženo pro maximální komfort 
 Tlačítka přidává rozšíření **MicroPython & CircuitPython Panel** (instaluje ho `setup.bat` / `setup.sh`). Kliknutí na tlačítko otevře integrovaný terminál se jménem `MicroPython` a spustí v něm příkaz.
 
 ### A) Postranní panel (Activity Bar)
-V levém svislém pruhu klikněte na ikonu čipu **MicroPython & CircuitPython**. Panel je **rychlý přístup k základním akcím**. Má dva bloky, **MicroPython** a **CircuitPython**, a každý ukazuje:
+V levém svislém pruhu klikněte na ikonu čipu **MicroPython & CircuitPython**. Panel je **rychlý přístup k základním akcím**. Má bloky **MicroPython** a **CircuitPython** (a blok **Na PC bez desky** se simulací a testy pro CircuitPython). Bloky desek ukazují:
 
 - **připojenou desku** té platformy – port (např. `COM4`) a jméno desky. Seznam se sám obnovuje každých 5 s, dokud je panel vidět; tlačítkem **↻** nahoře ho obnovíte hned. Sériové porty se při tom neotevírají, takže to nevadí běžícímu REPL ani Serial Monitoru.
 - **čtyři základní tlačítka**.

@@ -1061,11 +1061,13 @@ def cmd_devices(opts):
 #   name      text ve stavovem radku; $(ikona) je ikona VS Code (codicon)
 #   label     text tlacitka v panelu (blok uz rika, o kterou platformu jde)
 #   group     blok v panelu; platform = ktere desky blok ukazuje a kdy se
-#             ztlumi (kdyz takova deska neni pripojena)
+#             ztlumi (kdyz takova deska neni pripojena). Blok bez platformy
+#             (None - simulace a testy na PC) se neztlumi nikdy.
 #   statusBar False = tlacitko jen v panelu, ne ve spodnim stavovem radku
 #   confirm   (nepovinne, 8. polozka) otazka v dialogu VS Code pred spustenim;
 #             pro nevratne akce - prikaz pak ma --yes, terminal se uz nepta
 _MPY, _CPY = ("MicroPython", "micropython"), ("CircuitPython", "circuitpython")
+_PC = ("Na PC bez desky", None)
 _WIPE_MPY = "Smazat V\u0160ECHNY soubory na desce s MicroPythonem? Operace je nevratn\u00e1."
 _WIPE_CPY = "Smazat V\u0160ECHNY soubory na disku CIRCUITPY? Operace je nevratn\u00e1."
 PANEL_BUTTONS = [
@@ -1078,6 +1080,8 @@ PANEL_BUTTONS = [
     ("cpy-reset",  "$(debug-restart) CPY Restart", "\u21bb  Restartovat program", "cpy reset", "lightgreen", _CPY, False),
     ("cpy-repl",   "$(terminal) CPY REPL",        "\u2328  Konzole (REPL)",      "cpy repl",   "lightblue",  _CPY, True),
     ("cpy-wipe",   "$(trash) CPY Wipe",           "\U0001f5d1  Smazat desku",    "cpy wipe --yes", "red",  _CPY, False, _WIPE_CPY),
+    ("pc-sim",     "$(debug-alt) Simulace",       "▶  Simulace code.py",    "cpy sim",    "lightgreen", _PC,  False),
+    ("pc-test",    "$(beaker) Testy",             "✓  Testy",               "cpy test",   "lightblue",  _PC,  False),
 ]
 # Run on Save: po ulozeni souboru s touto priponou se zavola "cpy save".
 # Ktere soubory se opravdu zkopiruji, rozhodne .vscode/.ignoreCopy.
@@ -1101,7 +1105,9 @@ def cmd_vscode(opts):
     buttons = []
     for bid, name, label, cmd, color, (group, platform), status_bar, *rest in PANEL_BUTTONS:
         b = {"id": bid, "name": name, "label": label, "command": f"{py} .vscode/deska.py {cmd}",
-             "color": color, "group": group, "platform": platform}
+             "color": color, "group": group}
+        if platform:
+            b["platform"] = platform
         if not status_bar:
             b["statusBar"] = False
         if rest:                                # potvrzeni v dialogu VS Code
@@ -1122,9 +1128,9 @@ def cmd_vscode(opts):
     else:
         say(f"Nastaveni uz je aktualni: {SETTINGS_FILE}", "done")
     say(f"   Run on Save: soubory {RUN_ON_SAVE_MATCH} -> cpy save (podle .ignoreCopy)")
-    say(f"   Panel: bloky MicroPython a CircuitPython, {len(buttons)} tlacitek, z toho "
+    say(f"   Panel: bloky MicroPython, CircuitPython a Na PC bez desky, {len(buttons)} tlacitek, z toho "
         f"{sum(1 for b in PANEL_BUTTONS if b[6])} ve stavovem radku ({py} .vscode/deska.py ...)")
-    say("   Bloky ukazuji pripojene desky (devices --json).")
+    say("   Bloky MicroPython a CircuitPython ukazuji pripojene desky (devices --json).")
     if changed:
         say("   Tlacitka se zmenila. Pokud uz je panel nainstalovany, nabidne 'Prenacist okno'")
         say("   (nebo F1 -> 'Developer: Reload Window'). Panel nainstalovany az potom je nacte sam.")

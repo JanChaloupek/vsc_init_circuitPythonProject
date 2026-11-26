@@ -213,6 +213,24 @@
             "statusBar": false,
             "confirm": "Smazat VŠECHNY soubory na disku CIRCUITPY? Operace je nevratná.",
             "confirmButton": "Smazat"
+        },
+        {
+            "id": "pc-sim",
+            "name": "$(debug-alt) Simulace",
+            "label": "▶  Simulace code.py",
+            "command": "python .vscode/deska.py cpy sim",
+            "color": "lightgreen",
+            "group": "Na PC bez desky",
+            "statusBar": false
+        },
+        {
+            "id": "pc-test",
+            "name": "$(beaker) Testy",
+            "label": "✓  Testy",
+            "command": "python .vscode/deska.py cpy test",
+            "color": "lightblue",
+            "group": "Na PC bez desky",
+            "statusBar": false
         }
     ],
     "micropython.devicesCommand": "python .vscode/deska.py devices --json"
