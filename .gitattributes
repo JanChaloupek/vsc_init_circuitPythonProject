@@ -1,0 +1,2 @@
+# Shell skripty musi mit na Linuxu a macOS konce radku LF, jinak bash hlasi chyby.
+*.sh text eol=lf

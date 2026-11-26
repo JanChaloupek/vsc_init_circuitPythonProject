@@ -1,2 +1,4 @@
 @echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0.vscode\mpy.ps1" %*
+rem mpy - spoustec nastroje pro MicroPython (Windows).
+rem Cela logika je v .vscode\deska.py, prikazy vypise: mpy help
+python "%~dp0.vscode\deska.py" mpy %*

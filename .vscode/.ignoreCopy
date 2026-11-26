@@ -1,14 +1,51 @@
-run_test.py
-run_coverage.py
-mpy.cmd
+# ------------------------------------------------------------
+# .ignoreCopy - co se NEnahrava na desku s CircuitPythonem
+#
+# Plati pro Ctrl+S (Run on Save -> cpy save) i pro cpy upload / cpy setup.
+# Na desku se nahraje vsechno ostatni.
+#
+# Pravidla:
+#   - jedna maska na radek, radky zacinajici # jsou komentare
+#   - * znamena "cokoliv" (i pres vic slozek), ** znamena totez
+#   - cesty se pisou od korene projektu a s lomitkem /
+#   - skryte polozky (.git, .vscode, ...), __pycache__, *.pyc
+#     a boot_out.txt se nenahravaji nikdy (pojistka v deska.py)
+#
+# Na MicroPython se nahrava podle .vscode/upload_config.txt.
+# ------------------------------------------------------------
+
+# Program pro MicroPython - CircuitPython by ho spustil, kdyby chybel code.py
 main.py
+
+# Knihovna pro MicroPython (CircuitPython ma modul picoed vestaveny)
+lib/picoed_v2_lib/*
+lib/picoed_v2_lib/**
+
+# Napoveda pro editor a simulace hardwaru pro PC
 _stubs/*
 _stubs/**
 _fake/*
 _fake/**
+
+# Testy, ktere bezi na PC
 tests/*
 tests/**
-.vscode/dist/*
-.vscode/dist/**
-lib/picoed_v2_lib/*
-lib/picoed_v2_lib/**
+run_test.py
+run_coverage.py
+
+# Dokumentace, spoustece a nastaveni projektu
+*.md
+*.bat
+*.cmd
+*.sh
+*.ps1
+*.code-workspace
+pyrightconfig.json
+
+# Zalohy
+_backups/*
+_backups/**
+
+# Slozka .vscode (je skryta, takze se nenahrava i bez tohoto radku)
+.vscode/*
+.vscode/**

@@ -13,17 +13,15 @@
     "circuitpython.board.version": null,
     "circuitpython.board.vid": "0x2E8A",
     "circuitpython.board.pid": "0x1026",
-
     "emeraldwalk.runonsave": {
         "commands": [
             {
-                "match": ".*\\.py",
+                "match": "\\.(py|toml|json|txt|csv)$",
                 "isAsync": true,
-                "cmd": "powershell -ExecutionPolicy Bypass -NoProfile -File \"${workspaceFolder}\\.vscode\\copy.ps1\" \"${workspaceFolder}\" \"${relativeFile}\" \".vscode\\.ignoreCopy\""
+                "cmd": "python \"${workspaceFolder}/.vscode/deska.py\" cpy save \"${relativeFile}\""
             }
         ]
     },
-
     "cSpell.language": "cs,en",
     "cSpell.enabledFileTypes": [
         "python",
@@ -61,59 +59,89 @@
     "spellright.ignoreRegExpList": [
         ".*\\.pyi$"
     ],
-
-    "actionButtons": {
-        "defaultColor": "#ffffff",
-        "loadNpmCommands": false,
-        "commands": [
-            {
-                "name": "⬆ Upload project",
-                "command": "powershell -ExecutionPolicy Bypass -File .vscode/upload.ps1",
-                "color": "yellow"
-            },
-            {
-                "name": "▶ REPL",
-                "command": "powershell -ExecutionPolicy Bypass -File .vscode/repl.ps1",
-                "color": "lightgreen"
-            },
-            {
-                "name": "📂 List files",
-                "command": "powershell -ExecutionPolicy Bypass -File .vscode/list.ps1",
-                "color": "lightblue"
-            },
-            {
-                "name": "🗑 Wipe device",
-                "command": "powershell -ExecutionPolicy Bypass -File .vscode/wipe.ps1",
-                "color": "red"
-            }
-        ]
-    },
     "micropython.enableStatusToolbar": true,
     "micropython.autoOpenPanel": true,
     "micropython.commands": [
         {
-            "id": "upload",
-            "name": "⬆ Upload project",
-            "command": "powershell -ExecutionPolicy Bypass -File .vscode/upload.ps1",
-            "color": "yellow"
+            "id": "mpy-upload",
+            "name": "$(cloud-upload) MPY Upload",
+            "label": "⬆  Nahrát projekt",
+            "command": "python .vscode/deska.py mpy upload",
+            "color": "yellow",
+            "group": "MicroPython",
+            "platform": "micropython"
         },
         {
-            "id": "repl",
-            "name": "▶ REPL",
-            "command": "powershell -ExecutionPolicy Bypass -File .vscode/repl.ps1",
-            "color": "lightgreen"
+            "id": "mpy-run",
+            "name": "$(play) MPY Run",
+            "label": "▶  Spustit main.py",
+            "command": "python .vscode/deska.py mpy reset",
+            "color": "lightgreen",
+            "group": "MicroPython",
+            "platform": "micropython",
+            "statusBar": false
         },
         {
-            "id": "list",
-            "name": "📂 List files",
-            "command": "powershell -ExecutionPolicy Bypass -File .vscode/list.ps1",
-            "color": "lightblue"
+            "id": "mpy-repl",
+            "name": "$(terminal) MPY REPL",
+            "label": "⌨  Konzole (REPL)",
+            "command": "python .vscode/deska.py mpy repl",
+            "color": "lightblue",
+            "group": "MicroPython",
+            "platform": "micropython"
         },
         {
-            "id": "wipe",
-            "name": "🗑 Wipe device",
-            "command": "powershell -ExecutionPolicy Bypass -File .vscode/wipe.ps1",
-            "color": "red"
+            "id": "mpy-wipe",
+            "name": "$(trash) MPY Wipe",
+            "label": "🗑  Smazat desku",
+            "command": "python .vscode/deska.py mpy wipe --yes",
+            "color": "red",
+            "group": "MicroPython",
+            "platform": "micropython",
+            "statusBar": false,
+            "confirm": "Smazat VŠECHNY soubory na desce s MicroPythonem? Operace je nevratná.",
+            "confirmButton": "Smazat"
+        },
+        {
+            "id": "cpy-upload",
+            "name": "$(cloud-upload) CPY Upload",
+            "label": "⬆  Nahrát projekt",
+            "command": "python .vscode/deska.py cpy upload",
+            "color": "yellow",
+            "group": "CircuitPython",
+            "platform": "circuitpython"
+        },
+        {
+            "id": "cpy-reset",
+            "name": "$(debug-restart) CPY Restart",
+            "label": "↻  Restartovat program",
+            "command": "python .vscode/deska.py cpy reset",
+            "color": "lightgreen",
+            "group": "CircuitPython",
+            "platform": "circuitpython",
+            "statusBar": false
+        },
+        {
+            "id": "cpy-repl",
+            "name": "$(terminal) CPY REPL",
+            "label": "⌨  Konzole (REPL)",
+            "command": "python .vscode/deska.py cpy repl",
+            "color": "lightblue",
+            "group": "CircuitPython",
+            "platform": "circuitpython"
+        },
+        {
+            "id": "cpy-wipe",
+            "name": "$(trash) CPY Wipe",
+            "label": "🗑  Smazat desku",
+            "command": "python .vscode/deska.py cpy wipe --yes",
+            "color": "red",
+            "group": "CircuitPython",
+            "platform": "circuitpython",
+            "statusBar": false,
+            "confirm": "Smazat VŠECHNY soubory na disku CIRCUITPY? Operace je nevratná.",
+            "confirmButton": "Smazat"
         }
-    ]
+    ],
+    "micropython.devicesCommand": "python .vscode/deska.py devices --json"
 }
