@@ -10,6 +10,8 @@
         "./_stubs",
         "./_fake"
     ],
+    "python.terminal.activateEnvironment": false,
+    "python-envs.terminal.autoActivationType": "off",
     "circuitpython.board.version": null,
     "circuitpython.board.vid": "0x2E8A",
     "circuitpython.board.pid": "0x1026",

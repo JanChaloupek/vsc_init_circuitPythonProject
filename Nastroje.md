@@ -35,6 +35,8 @@ Příkazy v panelu, Run on Save i spouštěče dál volají obyčejné `python .
 - `.venv` neexistuje: použijí se knihovny systémového Pythonu (projekty připravené dřívější verzí setupu).
 - `.venv` je rozbité (Python, ze kterého vzniklo, byl odinstalovaný): `deska.py` vypíše upozornění a pokračuje bez něj. `setup.bat` / `setup.sh` takové `.venv` pozná a vytvoří znovu.
 
+Automatická aktivace `.venv` v terminálu je v `.vscode/settings.json` vypnutá (`python.terminal.activateEnvironment: false`, `python-envs.terminal.autoActivationType: off`). `deska.py` ji nepotřebuje a rozšíření Python by aktivační příkaz poslalo do terminálu i s Ctrl+C. Tím by přerušilo právě běžící `setup.bat` (dotaz *Terminate batch job (Y/N)?*): setup vytvoří `.venv` a hned potom nainstaluje rozšíření Python do otevřeného okna, které se okamžitě aktivuje. Pylance si `.venv` jako interpret vybere i tak.
+
 Další knihovnu (např. `circup` pro `cpy lib`) nainstalujete do `.venv` takto: `.venv\Scripts\python -m pip install circup` (Windows), `.venv/bin/python -m pip install circup` (Linux, macOS).
 
 Soubor `deska.py` je rozdělený na oddíly (v kódu hledejte `ODDIL`):
