@@ -26,7 +26,7 @@
 # musi umet nainstalovat i samotny Python.
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "3.2"
+$ScriptVersion = "3.3"
 $ScriptDate    = "2026-11-26"
 
 # Python, ktery se nainstaluje, kdyz na pocitaci zadny neni.
@@ -261,6 +261,12 @@ Write-Host "--------------------------------------"
 # ------------------------------------------------------------
 Write-Host "[5/8] Instalace rozsireni MicroPython & CircuitPython Panel..." @ColorInfo
 
+# Prikaz "code" bezi na Node.js a pri instalaci rozsireni vypisuje varovani
+# "DeprecationWarning: url.parse()". Neni to chyba, jen by studenta zbytecne
+# vystrasilo - promenna NODE_NO_WARNINGS ho skryje (plati jen pro kroky 5 a 6).
+$oldNodeNoWarnings = $env:NODE_NO_WARNINGS
+$env:NODE_NO_WARNINGS = "1"
+
 $vsix = Join-Path $PSScriptRoot "dist\micropython-panel.vsix"
 if (Test-Path $vsix) {
     & $codeCmd @CodeExtArgs --install-extension $vsix --force
@@ -302,6 +308,7 @@ foreach ($ext in $allExtensions) {
         Write-Host "[CHYBA]" @ColorError
     }
 }
+$env:NODE_NO_WARNINGS = $oldNodeNoWarnings
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------

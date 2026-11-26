@@ -28,7 +28,7 @@
 # umet zkontrolovat i samotny Python.
 # ------------------------------------------------------------
 SCRIPT_NAME="setup.sh"
-SCRIPT_VERSION="3.2"
+SCRIPT_VERSION="3.3"
 SCRIPT_DATE="2026-11-26"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -146,6 +146,10 @@ echo "--------------------------------------"
 # 5) Instalace MicroPython & CircuitPython Panelu (.vsix)
 # ------------------------------------------------------------
 echo "[5/8] Instalace rozsireni MicroPython & CircuitPython Panel..."
+# Prikaz "code" bezi na Node.js a pri instalaci rozsireni vypisuje varovani
+# "DeprecationWarning: url.parse()". Neni to chyba, jen by studenta zbytecne
+# vystrasilo - promenna NODE_NO_WARNINGS ho skryje.
+export NODE_NO_WARNINGS=1
 VSIX="$SCRIPT_DIR/dist/micropython-panel.vsix"
 if [ -n "$CODE_CMD" ]; then
     if [ -f "$VSIX" ]; then
