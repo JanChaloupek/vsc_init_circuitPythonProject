@@ -71,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.2"
+SCRIPT_VERSION = "2.3"
 SCRIPT_DATE = "2026-11-26"
 
 
@@ -83,6 +83,7 @@ PROJECT = HERE.parent                            # koren projektu
 IGNORE_FILE = HERE / ".ignoreCopy"               # co se NEnahrava na CircuitPython
 UPLOAD_CONFIG = HERE / "upload_config.txt"       # co se nahrava na MicroPython
 SETTINGS_FILE = HERE / "settings.json"           # nastaveni VS Code
+ACTIVE_FILE = HERE / ".active_device.json"       # rucne zvolena aktivni deska (mpy/cpy select)
 
 CP_ENTRY = "code.py"            # hlavni program CircuitPythonu
 MP_ENTRY = "main.py"            # hlavni program MicroPythonu
@@ -474,6 +475,37 @@ def ports_for_uid(uid, ports=None):
     return same
 
 
+def load_active_target(platform):
+    """Nacte rucne zvolenou desku (mpy / cpy) z .vscode/.active_device.json."""
+    if not ACTIVE_FILE.is_file():
+        return None
+    with contextlib.suppress(Exception):
+        data = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
+        key = "mpy" if platform in ("mpy", "micropython") else "cpy"
+        return data.get(key) or data.get("micropython" if key == "mpy" else "circuitpython")
+    return None
+
+
+def save_active_target(platform, target):
+    """Zapise nebo smaze rucne zvolenou desku v .vscode/.active_device.json."""
+    data = {}
+    if ACTIVE_FILE.is_file():
+        with contextlib.suppress(Exception):
+            data = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
+    key = "mpy" if platform in ("mpy", "micropython") else "cpy"
+    other_key = "micropython" if key == "mpy" else "circuitpython"
+    if not target or str(target).lower() in ("auto", "none", "clear", "reset"):
+        data.pop(key, None)
+        data.pop(other_key, None)
+    else:
+        data[key] = str(target)
+    with contextlib.suppress(Exception):
+        if data:
+            ACTIVE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        elif ACTIVE_FILE.exists():
+            ACTIVE_FILE.unlink()
+
+
 class Board:
     """Jedna deska s CircuitPythonem: jeji disk a seriovy port.
     Obe se hledaji az ve chvili, kdy je potreba (a jen jednou)."""
@@ -494,9 +526,15 @@ class Board:
             self._drive = p if p.is_dir() else None
             return self._drive
         drives = find_drives(DRIVE_LABEL)
+        active = load_active_target("cpy")
+        if active and drives:
+            matched = [d for d in drives if str(d).rstrip("\\/").lower() == str(active).rstrip("\\/").lower()]
+            if matched:
+                self._drive = matched[0]
+                return self._drive
         if len(drives) > 1:
             warn("Pripojeno vic desek CIRCUITPY: " + ", ".join(str(d) for d in drives)
-                 + f". Pouzivam {drives[0]} (jinou vyberes volbou --drive).")
+                 + f". Pouzivam {drives[0]} (jinou vyberes: cpy select <disk> nebo volbou --drive).")
         self._drive = drives[0] if drives else None
         return self._drive
 
@@ -523,6 +561,12 @@ class Board:
             self._port = self.opts.port
             return self._port
         ports = list_ports()
+        active = load_active_target("cpy")
+        if active and not self.opts.port:
+            matched = [p for p in ports if p.device.upper() == str(active).upper()]
+            if matched:
+                self._port = matched[0].device
+                return self._port
         uid = self.boot_info()["uid"]
         same = ports_for_uid(uid, ports)
         if same:
@@ -536,7 +580,7 @@ class Board:
             self._port = known[0].device
         elif len(known) > 1 and not uid:
             raise CpyError("Pripojeno vic desek s CircuitPythonem: "
-                           + ", ".join(p.device for p in known) + ". Vyber jednu volbou --port.")
+                           + ", ".join(p.device for p in known) + ". Vyber jednu: cpy select <port> nebo volbou --port.")
         return self._port
 
     @property
@@ -1020,6 +1064,33 @@ def collect_devices():
                 "platform": "other", "tool": None, "port": p.device, "drive": None,
                 "name": p.description, "firmware": None, "note": None, "usb": vidpid(p),
             })
+
+    # Oznaceni aktivnich a rucne zvolenych desek (mpy/cpy select)
+    mpy_active = load_active_target("mpy")
+    mpy_devs = [d for d in devices if d["platform"] == "micropython"]
+    mpy_matched = [d for d in mpy_devs if mpy_active and d.get("port") and d["port"].upper() == str(mpy_active).upper()]
+    for i, d in enumerate(mpy_devs):
+        if mpy_matched:
+            d["active"] = (d == mpy_matched[0])
+            d["selected"] = d["active"]
+        else:
+            d["active"] = (i == 0)
+            d["selected"] = False
+
+    cpy_active = load_active_target("cpy")
+    cpy_devs = [d for d in devices if d["platform"] == "circuitpython"]
+    cpy_matched = [d for d in cpy_devs if cpy_active and (
+        (d.get("drive") and str(d["drive"]).rstrip("\\/").lower() == str(cpy_active).rstrip("\\/").lower()) or
+        (d.get("port") and d["port"].upper() == str(cpy_active).upper())
+    )]
+    for i, d in enumerate(cpy_devs):
+        if cpy_matched:
+            d["active"] = (d == cpy_matched[0])
+            d["selected"] = d["active"]
+        else:
+            d["active"] = (i == 0)
+            d["selected"] = False
+
     return devices
 
 
@@ -1045,7 +1116,12 @@ def cmd_devices(opts):
             where = f"{d['port'] or '':<8} " + (f"disk {d['drive']}   " if d["drive"] else "")
             text = d["firmware"] + "; " + d["name"] if d["firmware"] else d["name"]
             extra = f"   (USB {d['usb']})" if d.get("usb") else ""
-            say(f"   {where}{text}{extra}" + (f"  - {d['note']}" if d["note"] else ""))
+            status = ""
+            if d.get("selected"):
+                status = "  [vybrana rucne]"
+            elif d.get("active") and len(items) > 1:
+                status = "  [vychozi aktivni]"
+            say(f"   {where}{text}{extra}" + (f"  - {d['note']}" if d["note"] else "") + (col(status, "done") if status else ""))
         if not items:
             say("   zadna")
     line()
@@ -2145,6 +2221,63 @@ def cp_flash(board, opts):
         raise CpyError("Deska zustala v bootloaderu - je soubor .uf2 urceny pro tuto desku?")
 
 
+def cp_select(board, opts):
+    """cpy select [disk|port|auto]: vybere aktivni desku pro CircuitPython."""
+    target = opts.args[0] if opts.args else None
+    drives = find_drives(DRIVE_LABEL)
+    if target:
+        if target.lower() in ("auto", "none", "clear", "reset"):
+            save_active_target("cpy", None)
+            say("Aktivni CircuitPython deska: automaticky vyber (prvni nalezena).", "done")
+            return 0
+        save_active_target("cpy", target)
+        say(f"Aktivni CircuitPython deska nastavena na: {target}", "done")
+        return 0
+
+    say("Vyber aktivni desky pro CircuitPython:", "info")
+    line()
+    if not drives:
+        say("Zadny disk CIRCUITPY neni pripojen.", "warn")
+        curr = load_active_target("cpy")
+        if curr:
+            say(f"Aktualne ulozena volba: {curr}")
+            say("Pro zruseni napis: .\\cpy select auto")
+        return 1
+
+    curr = load_active_target("cpy")
+    for i, d in enumerate(drives, 1):
+        is_active = (str(d).rstrip("\\/").lower() == str(curr).rstrip("\\/").lower()) if curr else (i == 1)
+        tag = " (aktivni)" if is_active else ""
+        boot = read_boot_out(d)
+        name = boot["line"].split(";")[-1].strip() if ";" in boot["line"] else boot["board_id"]
+        say(f"  [{i}] {str(d):<6} {name}{tag}")
+    say("  [a] Automaticky vyber (vychozi deska)")
+
+    if not stdin_is_console():
+        return 0
+    try:
+        ans = input(f"\nZvol desku [1-{len(drives)} nebo a]: ").strip().lower()
+    except EOFError:
+        return 0
+    if not ans:
+        return 0
+    if ans in ("a", "auto", "0"):
+        save_active_target("cpy", None)
+        say("Nastaven automaticky vyber.", "done")
+        return 0
+    try:
+        idx = int(ans) - 1
+        if 0 <= idx < len(drives):
+            chosen = drives[idx]
+            save_active_target("cpy", str(chosen))
+            say(f"Vybran disk: {chosen}", "done")
+        else:
+            say("Neplatna volba.", "error")
+    except ValueError:
+        say("Neplatna volba.", "error")
+    return 0
+
+
 # --- Simulace a testy na PC (cpy/mpy sim, cpy/mpy test) -----
 # Bez desky: misto modulu desky (board, digitalio, picoed, machine, time, ...)
 # se nactou falesne verze z pc/_fake. Stejny model hardwaru slouzi dvema
@@ -2341,10 +2474,20 @@ def mp_locate(opts):
             tips.append("deska je v rezimu bootloaderu (disk RPI-RP2) - stiskni RESET")
         tips.append("je deska pripojena DATOVYM kabelem a je na ni MicroPython? Over: .\\mpy devices")
         return None, "", tips
-    p = found[0]
+
+    active = load_active_target("mpy")
+    active_port = None
+    if active:
+        matched = [p for p in found if p.device.upper() == str(active).upper()]
+        if matched:
+            active_port = matched[0]
+
+    p = active_port or found[0]
     desc = f"{known_name(p, MP_DEVICES) or p.description} (USB {vidpid(p)})"
-    if len(found) > 1:
-        desc += f"; pripojeno vic desek: {', '.join(q.device for q in found)} - jinou vyberes --port"
+    if active_port:
+        desc += " (vybrana prikazem select)"
+    elif len(found) > 1:
+        desc += f"; pripojeno vic desek: {', '.join(q.device for q in found)} - jinou vyberes: mpy select"
     return p.device, desc, []
 
 
@@ -2822,6 +2965,69 @@ def mp_plot(opts):
     run_plotter(mp_find_port(opts), "Graf - MicroPython", opts.number("seconds"))
 
 
+def mp_select(opts):
+    """mpy select [port|auto]: vybere aktivni desku pro MicroPython."""
+    target = opts.args[0] if opts.args else None
+    found = [p for p in list_ports() if is_micropython_port(p)]
+
+    if target:
+        if target.lower() in ("auto", "none", "clear", "reset"):
+            save_active_target("mpy", None)
+            say("Aktivni MicroPython deska: automaticky vyber (prvni nalezena).", "done")
+            return 0
+        matched = [p for p in found if p.device.upper() == target.upper()]
+        save_active_target("mpy", target.upper())
+        if matched:
+            p = matched[0]
+            say(f"Aktivni MicroPython deska nastavena: {p.device} ({known_name(p, MP_DEVICES) or p.description})", "done")
+        else:
+            say(f"Aktivni MicroPython deska nastavena na {target.upper()} (aktualne neni pripojena).", "warn")
+        return 0
+
+    say("Vyber aktivni desky pro MicroPython:", "info")
+    line()
+    if not found:
+        say("Zadna MicroPython deska neni pripojena.", "warn")
+        curr = load_active_target("mpy")
+        if curr:
+            say(f"Aktualne ulozena volba: {curr}")
+            say("Pro zruseni napis: .\\mpy select auto")
+        return 1
+
+    curr = load_active_target("mpy")
+    for i, p in enumerate(found, 1):
+        is_active = (p.device.upper() == str(curr).upper()) if curr else (i == 1)
+        tag = " (aktivni)" if is_active else ""
+        name = known_name(p, MP_DEVICES) or p.description
+        say(f"  [{i}] {p.device:<7} {name}{tag}")
+    say("  [a] Automaticky vyber (vychozi deska)")
+
+    if not stdin_is_console():
+        return 0
+
+    try:
+        ans = input(f"\nZvol desku [1-{len(found)} nebo a]: ").strip().lower()
+    except EOFError:
+        return 0
+    if not ans:
+        return 0
+    if ans in ("a", "auto", "0"):
+        save_active_target("mpy", None)
+        say("Nastaven automaticky vyber.", "done")
+        return 0
+    try:
+        idx = int(ans) - 1
+        if 0 <= idx < len(found):
+            chosen = found[idx]
+            save_active_target("mpy", chosen.device)
+            say(f"Vybrana deska: {chosen.device} ({known_name(chosen, MP_DEVICES) or chosen.description})", "done")
+        else:
+            say("Neplatna volba.", "error")
+    except ValueError:
+        say("Neplatna volba.", "error")
+    return 0
+
+
 # ============================================================
 # ODDIL 9  Napoveda, cteni parametru a hlavni funkce
 # ============================================================
@@ -2848,6 +3054,7 @@ HELP_MPY = """Pouziti: mpy <prikaz> [volby]          (v PowerShellu: .\\mpy <pri
   setup                 kompletni priprava: wipe + upload + list
   reset [--hard]        restart: spusti main.py (--hard = restart cele desky)
   plot                  zivy graf hodnot, ktere program vypisuje pres print()
+  select [port|auto]    zvoli aktivni desku (nebo interaktivni vyber)
   devices               jake desky jsou pripojene
   help                  tato napoveda
 
@@ -2875,6 +3082,7 @@ Stejne prikazy jako mpy:
   setup                 kompletni priprava: wipe + upload + list
   reset [--hard]        znovu spusti code.py (--hard = restart cele desky)
   plot                  zivy graf hodnot, ktere program vypisuje pres print()
+  select [disk|auto]    zvoli aktivni desku (nebo interaktivni vyber)
   devices               jake desky jsou pripojene
   help                  tato napoveda
 
@@ -2931,6 +3139,7 @@ CPY_COMMANDS = {
     "open": (cp_open, set()),
     "bootloader": (cp_bootloader, set()),
     "flash": (cp_flash, set()),
+    "select": (cp_select, set()),
     "sim": (cp_sim, set()),
     "test": (cp_test, set()),
 }
@@ -2947,6 +3156,7 @@ MPY_COMMANDS = {
     "setup": (mp_setup, set()),
     "reset": (mp_reset, {"hard"}),
     "plot": (mp_plot, {"seconds"}),
+    "select": (mp_select, set()),
     "sim": (mp_sim, {"pico"}),
     "test": (mp_test, set()),
 }

@@ -2,6 +2,7 @@ __pycache__/
 .venv/
 _backups/
 *.code-workspace
+.vscode/.active_device.json
 lib/*
 !lib/.gitkeep
 !lib/picoed_v2_lib/
