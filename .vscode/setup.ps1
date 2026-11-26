@@ -21,7 +21,7 @@
 # musi umet nainstalovat i samotny Python.
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "3.0"
+$ScriptVersion = "3.1"
 $ScriptDate    = "2026-11-26"
 
 # Barevne profily vypisu (drive v utils.ps1)
@@ -151,6 +151,31 @@ if (-not $codeCmd) {
 } else {
     Write-Host "VS Code CLI nalezen: $codeCmd" @ColorDone
 }
+
+# Testovaci prostredi lektora (OneDrive\R_D\test-infra, Start-StudentTest.ps1):
+# nad slozkou projektu lezi znackovy soubor test-infra.json s cestou
+# k testovaci slozce rozsireni. Rozsireni se pak instaluji tam
+# (--extensions-dir), ne do bezneho VS Code lektora.
+# Student tento soubor nema, pro nej se nic nemeni.
+$CodeExtArgs = @()
+$markerDir = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # nad korenem projektu
+for ($i = 0; $i -lt 3 -and $markerDir; $i++) {
+    $marker = Join-Path $markerDir "test-infra.json"
+    if (Test-Path $marker) {
+        try {
+            $testInfra = Get-Content $marker -Raw | ConvertFrom-Json
+            if ($testInfra.extensionsDir) {
+                $CodeExtArgs = @("--extensions-dir", $testInfra.extensionsDir)
+                Write-Host "TESTOVACI PROSTREDI (nalezen $marker):" @ColorFile
+                Write-Host "  rozsireni se instaluji do $($testInfra.extensionsDir)" @ColorFile
+            }
+        } catch {
+            Write-Host "Upozorneni: $marker nelze precist - rozsireni pujdou do bezneho VS Code." @ColorError
+        }
+        break
+    }
+    $markerDir = Split-Path $markerDir -Parent
+}
 Write-Host "--------------------------------------"
 
 # ------------------------------------------------------------
@@ -160,7 +185,7 @@ Write-Host "[5/8] Instalace rozsireni MicroPython & CircuitPython Panel..." @Col
 
 $vsix = Join-Path $PSScriptRoot "dist\micropython-panel.vsix"
 if (Test-Path $vsix) {
-    & $codeCmd --install-extension $vsix --force
+    & $codeCmd @CodeExtArgs --install-extension $vsix --force
     if ($LASTEXITCODE -eq 0) {
         Write-Host "MicroPython & CircuitPython Panel uspesne nainstalovan/aktualizovan." @ColorDone
     } else {
@@ -192,7 +217,7 @@ $allExtensions = @(
 
 foreach ($ext in $allExtensions) {
     Write-Host "  -> Instaluji $($ext.Name) ... " -NoNewline
-    & $codeCmd --install-extension $ext.Id --force | Out-Null
+    & $codeCmd @CodeExtArgs --install-extension $ext.Id --force | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK]" @ColorDone
     } else {
