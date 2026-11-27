@@ -169,6 +169,13 @@ MicroPython deska nemá USB disk, takže `mpy` všechno dělá přes nástroj **
 
 `mpremote cp` porovnává obsah souborů a nezměněné přeskočí (vypíše `Up to date`).
 
+Soubory se kopírují s cílovým jménem (`cp main.py :main.py`, ne jen `cp main.py :`). BBC micro:bit by je jinak uložil pod **prázdné jméno**.
+
+**BBC micro:bit** (USB `0D28:0204`, tabulka `MP_FLAT_USB`) má ploché úložiště: bez složek, bez `os.mkdir`, bez modulu `json`, a `os.listdir()` u něj nebere cestu. Proto:
+- `mpy upload` místo `cp -r lib :` kopíruje soubory ze složky po jednom do kořene a podsložky přeskočí (`mp_cp_plan`).
+- `mpy list`, `wipe` a `check` posílají na desku kód, který vypíše seznam souborů jako zápis Pythonu (`repr`), ne jako JSON. Na PC ho načte `ast.literal_eval`.
+- Ostatní příkazy (`reset`, `repl`, `runmain`) fungují stejně jako u Pica.
+
 ---
 
 ## 6. Co se nahrává: `.ignoreCopy` a `upload_config.txt`

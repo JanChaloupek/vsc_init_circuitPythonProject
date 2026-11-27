@@ -15,6 +15,12 @@ V rámci výuky a tohoto projektu je **MicroPython** určen pro následující h
 > [!NOTE]
 > Pro desky **Pico:ed verze 1 a verze 2** je k dispozici také platforma **CircuitPython** (viz samostatný návod `CircuitPython.md`). Desky BBC micro:bit a samostatné Raspberry Pi Pico v tomto kurzu běží výhradně na **MicroPythonu**.
 
+> [!IMPORTANT]
+> **BBC micro:bit** má jiný MicroPython než ostatní desky:
+> - **Nemá složky.** `mpy upload` nahraje soubory ze složky `lib/` přímo do kořene desky a podsložky (balíčky jako `lib/picoed_v2_lib/`) přeskočí – vypíše to jako `preskoceno`. Vlastní moduly pro micro:bit dávejte jako soubory přímo do `lib/` (např. `lib/robot.py`).
+> - **Je starší** (micro:bit v2: MicroPython 1.15) a nezná **f-řetězce** (`f"..."`), ty umí až verze 1.17. Program s nimi skončí hned po spuštění chybou `SyntaxError`. Texty skládejte pomocí `+`: `print("Vzdalenost: " + str(cm))`.
+> - Nemá moduly `json`, `re`, `hashlib` a další; místo `machine.Pin` se používá modul `microbit` (`pin0`, `display`, `button_a`).
+
 ---
 
 ## 2. Hlavní program: `main.py` – co dělá a co všechno umí
@@ -322,4 +328,5 @@ Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, S
 | **Linux/macOS: `./setup.sh` hlásí `Permission denied`** | Skript nemá příznak spustitelnosti (projekt rozbalený na Windows, na flashce nebo disku s FAT/NTFS). | Spusťte ho jako `bash setup.sh`. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`. |
 | **`NameError: name '\ufeff...' isn't defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `mpy upload` na to upozorní. Ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8` a nahrajte znovu. |
 | **Po nahrání se nic neděje** | MicroPython po nahrání program nespouští. | Spusťte ho: `mpy reset` (nebo tlačítko RESET). |
+| **micro:bit: `SyntaxError: invalid syntax` hned po spuštění** | V programu je f-řetězec (`f"..."`) nebo jiná novinka, kterou starší MicroPython na micro:bitu nezná. | Texty skládejte pomocí `+` a `str()`. Řádek s chybou ukáže `mpy reset`. |
 | **MicroPython deska nenalezena** | Deska není připojená datovým kabelem, nebo je na ní CircuitPython. | `mpy devices` ukáže, co je připojené; na CircuitPython použijte `cpy`. |

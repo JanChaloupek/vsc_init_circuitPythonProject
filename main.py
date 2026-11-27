@@ -3,6 +3,8 @@
 #   - Raspberry Pi Pico / Pico W
 #   - ELECFREAKS Pico:ed v2
 #   - BBC micro:bit v1 / v2
+# Pozor: MicroPython na micro:bitu je stary (v2: 1.15) a nezna f-retezce
+# (f"..."), ty umi az MicroPython 1.17. Proto se texty skladaji pomoci "+".
 
 import time
 
@@ -57,8 +59,8 @@ if display is None:
             _pin = Pin(25, Pin.OUT)
 
         class _PicoDisplay:
-            def scroll(self, text): print(f"[Display] {text}")
-            def show(self, val): print(f"[Display] {val}")
+            def scroll(self, text): print("[Display] " + str(text))
+            def show(self, val): print("[Display] " + str(val))
 
         class _PicoLed:
             def on(self): _pin.value(1)
@@ -74,8 +76,8 @@ if display is None:
 # 4. Fallback pro PC simulaci
 if display is None:
     class _ConsoleDisplay:
-        def scroll(self, text): print(f"[Display] {text}")
-        def show(self, val): print(f"[Display] {val}")
+        def scroll(self, text): print("[Display] " + str(text))
+        def show(self, val): print("[Display] " + str(val))
 
     class _ConsoleLed:
         _s = False
@@ -90,7 +92,7 @@ if display is None:
     board_name = "PC / Simulator"
 
 if __name__ == "__main__":
-    print(f"Spusteno main.py na desce: {board_name}")
+    print("Spusteno main.py na desce: " + board_name)
     display.scroll("ZSaPR")
     while True:
         led.on()

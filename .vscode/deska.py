@@ -2673,9 +2673,54 @@ def mp_upload_items():
     return items
 
 
+# BBC micro:bit (i Calliope mini) ma ploche uloziste: zadne slozky, chybi
+# os.mkdir i modul json. Pozna se podle USB VID:PID (rozhrani DAPLink).
+MP_FLAT_USB = {(0x0D28, 0x0204)}
+
+
+def mp_is_flat(port):
+    """True, kdyz je na portu deska bez slozek (micro:bit)."""
+    return any(p.device.upper() == str(port).upper() and (p.vid, p.pid) in MP_FLAT_USB
+               for p in list_ports())
+
+
+def mp_cp_plan(items, flat):
+    """Argumenty pro mpremote (vsechno jednim spojenim, prikazy spojene '+'),
+    pocet nahravanych souboru a preskocene slozky.
+    - Soubor se kopiruje pod svym jmenem (cil ':main.py', ne jen ':'):
+      micro:bit by ho jinak ulozil pod prazdne jmeno.
+    - Slozka: 'cp -r'. Na micro:bitu (flat) slozky nejsou - soubory ze
+      slozky jdou primo do korene a podslozky (balicky) se preskoci."""
+    args, count, skipped = [], 0, []
+
+    def add(*a):
+        if args:
+            args.append("+")
+        args.extend(a)
+
+    for item in items:
+        src = PROJECT / item
+        if not src.exists():
+            continue
+        if src.is_file():
+            add("cp", item, ":" + src.name)
+            count += 1
+        elif not flat:
+            add("cp", "-r", item, ":")
+            count += sum(1 for f in src.rglob("*") if f.is_file())
+        else:
+            for f in sorted(src.iterdir()):
+                rel = f.relative_to(PROJECT).as_posix()
+                if f.is_file():
+                    add("cp", rel, ":" + f.name)
+                    count += 1
+                elif f.is_dir() and not f.name.startswith((".", "__pycache__")):
+                    skipped.append(rel + "/")
+    return args, count, skipped
+
+
 def mp_copy(port, items):
     """Nahraje soubory a slozky jednim spojenim mpremote (prikazy spojene '+')."""
-    args = []
     for item in items:
         src = PROJECT / item
         if not src.exists():
@@ -2686,14 +2731,10 @@ def mp_copy(port, items):
             if has_bom(f):
                 warn(f"{f.relative_to(PROJECT).as_posix()} je ulozeny jako 'UTF-8 with BOM' - "
                      f"na desce skonci chybou NameError ({BOM_HELP}).")
-        if args:
-            args.append("+")
-        if src.is_dir():
-            say("Nahravam slozku: " + col(item, "dir"))
-            args += ["cp", "-r", item, ":"]
-        else:
-            say("Nahravam soubor: " + col(item, "file"))
-            args += ["cp", item, ":"]
+        say(("Nahravam slozku: " + col(item, "dir")) if src.is_dir() else ("Nahravam soubor: " + col(item, "file")))
+    args, _count, skipped = mp_cp_plan(items, mp_is_flat(port))
+    for s in skipped:
+        warn(f"Preskakuji {s}: micro:bit nema slozky (balicky na nem nefunguji).")
     if not args:
         raise CpyError("Neni co nahrat.")
     line()
@@ -2735,11 +2776,14 @@ def mp_upload_files(opts, items, title, source):
 
     # 3) Nahravani pres mpremote (vsechno jednim spojenim, prikazy spojene '+')
     st.head("Nahravani (mpremote)")
-    args = []
-    for item in existing:
-        if args:
-            args.append("+")
-        args += ["cp", "-r", item, ":"] if (PROJECT / item).is_dir() else ["cp", item, ":"]
+    flat = mp_is_flat(port)
+    args, total_files, skipped = mp_cp_plan(existing, flat)
+    if flat:
+        st.info("micro:bit:", "nema slozky - soubory jdou primo do korene desky")
+    for s in skipped:
+        st.info("preskoceno:", f"{s} - micro:bit nema slozky, balicky na nem nefunguji", "warn")
+    if not args:
+        st.fail("neni co nahrat.", f"zkontroluj {source}")
     st.info("prikaz:", "mpremote connect " + port + " " + " ".join(args))
     t0 = time.monotonic()
     up_to_date, last = 0, []
@@ -2826,8 +2870,10 @@ def mp_repl(opts):
 
 # Kod, ktery se spusti NA DESCE: projde soubory a vypise je jako JSON.
 # (mode & 0x4000 znamena "slozka", st[6] je velikost souboru)
+# Vystup je zapis Pythonu (repr), ne JSON: micro:bit modul json nema.
+# micro:bit nema slozky (chybi os.mkdir) a os.listdir() u nej nebere cestu.
 MP_WALK_CODE = """
-import os, json
+import os
 def walk(p):
     res = []
     try:
@@ -2849,19 +2895,28 @@ def walk(p):
     for d in dirs:
         res.extend(walk(p + '/' + d if p != '/' else '/' + d))
     return res
-print(json.dumps(walk('/')))
+if hasattr(os, 'mkdir'):
+    tree = walk('/')
+else:
+    tree = [('/', [], [(n, os.stat(n)[6]) for n in os.listdir()])]
+print('@@TREE', repr(tree))
 """
 
 
 def mp_tree(port):
     """Nacte z desky seznam souboru a postavi z nej strom pro print_tree."""
+    import ast
     r = mpremote(port, "exec", MP_WALK_CODE, capture=True, timeout=30)
     out = r.stdout or ""
-    start, end = out.find("["), out.rfind("]")
-    if r.returncode != 0 or start < 0 or end <= start:
-        raise CpyError("Vypis souboru z desky se nepodaril.\n" + (r.stderr or out).strip())
-    data = json.loads(out[start:end + 1])
-    nodes = {path: {"files": sorted((f[0], f[1]) for f in files), "dirs": [], "error": None}
+    start = out.find("@@TREE")
+    try:
+        if r.returncode != 0 or start < 0:
+            raise ValueError
+        data = ast.literal_eval(out[start + len("@@TREE"):].strip())
+    except (ValueError, SyntaxError):
+        raise CpyError("Vypis souboru z desky se nepodaril.\n" + ((r.stderr or "") + out).strip()) from None
+    # soubor s prazdnym jmenem vznika na micro:bitu po 'cp soubor :' starsich verzi
+    nodes = {path: {"files": sorted((f[0] or "(soubor bez jmena)", f[1]) for f in files), "dirs": [], "error": None}
              for path, _dirs, files in data}
     for path, dirs, _files in data:
         for d in sorted(dirs):
@@ -2884,11 +2939,12 @@ def mp_list(opts):
 # Kod pro desku: rekurzivne smaze vsechny soubory a slozky.
 MP_WIPE_CODE = """
 import os
+FLAT = not hasattr(os, 'mkdir')     # micro:bit: bez slozek, listdir() bez cesty
 def wipe(path=''):
-    for name in os.listdir(path if path else '/'):
+    for name in (os.listdir() if FLAT else os.listdir(path if path else '/')):
         full = name if path == '' else path + '/' + name
         try:
-            if os.stat(full)[0] & 0x4000:
+            if not FLAT and os.stat(full)[0] & 0x4000:
                 wipe(full)
                 os.rmdir(full)
             else:
@@ -2915,7 +2971,7 @@ def mp_do_wipe(port, st=None):
             else:
                 say(col("ERROR", "error") + ": " + row[4:].strip())
         elif row.startswith("Smazano:"):
-            name = row[8:].strip()
+            name = row[8:].strip() or "(soubor bez jmena)"
             if st:
                 st.info("smazano:", name)
             else:
@@ -3054,7 +3110,8 @@ def mp_reset(opts):
     with open_repl_step(st, port) as repl:
         interrupt_step(st, repl)
         try:
-            has_main = repl.run_snippet("import os\nprint('main.py' in os.listdir('/'))").strip()
+            has_main = repl.run_snippet("import os\ntry:\n    n = os.listdir('/')\nexcept TypeError:\n"
+                                        "    n = os.listdir()\nprint('main.py' in n)").strip()
         except CpyError:
             has_main = "?"
         if has_main == "False":
