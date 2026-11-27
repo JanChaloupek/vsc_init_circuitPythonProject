@@ -20,6 +20,9 @@ V rámci výuky a tohoto projektu je **MicroPython** určen pro následující h
 > - **Nemá složky.** `mpy upload` nahraje soubory ze složky `lib/` přímo do kořene desky a podsložky (balíčky jako `lib/picoed_v2_lib/`) přeskočí – vypíše to jako `preskoceno`. Vlastní moduly pro micro:bit dávejte jako soubory přímo do `lib/` (např. `lib/robot.py`).
 > - **Je starší** (micro:bit v2: MicroPython 1.15) a nezná **f-řetězce** (`f"..."`), ty umí až verze 1.17. Program s nimi skončí hned po spuštění chybou `SyntaxError`. Texty skládejte pomocí `+`: `print("Vzdalenost: " + str(cm))`.
 > - Nemá moduly `json`, `re`, `hashlib` a další; místo `machine.Pin` se používá modul `microbit` (`pin0`, `display`, `button_a`).
+> - **Úložiště má jen asi 20 kB.** Větší knihovny zmenšete při nahrávání: `mpy minify simple` (nebo `full`).
+>
+> Podrobně, s naměřenými čísly: [MicroBit.md](MicroBit.md).
 
 ---
 
@@ -114,7 +117,7 @@ Před prvním spuštěním je nutné připravit nástroje a rozšíření v edit
 - **Na Windows:** dvojklikem spusťte **`setup.bat`** v kořeni projektu.
 - **Na Linuxu a macOS:** v terminálu spusťte **`./setup.sh`**. Tady je **povinný**: nastavení je připravené pro Windows (příkaz `python`) a skript ho přepíše na `python3`. Bez něj nefunguje nahrávání po `Ctrl+S` ani tlačítka panelu.
 
-Instalační skript ověří Python 3 (na Windows ho v případě potřeby nainstaluje) a ve složce projektu vytvoří virtuální prostředí **`.venv`**. Do něj nainstaluje nástroj **`mpremote`** (komunikace s deskou, obsahuje i `pyserial`) a **`matplotlib`** (graf hodnot). Dál nainstaluje rozšíření **MicroPython & CircuitPython Panel** a nastaví ovládací tlačítka v editoru. Na konci vypíše, jaké desky jsou připojené.
+Instalační skript ověří Python 3 (na Windows ho v případě potřeby nainstaluje) a ve složce projektu vytvoří virtuální prostředí **`.venv`**. Do něj nainstaluje nástroj **`mpremote`** (komunikace s deskou, obsahuje i `pyserial`), **`python-minifier`** (zmenšení souborů při nahrávání, `mpy minify`) a **`matplotlib`** (graf hodnot). Dál nainstaluje rozšíření **MicroPython & CircuitPython Panel** a nastaví ovládací tlačítka v editoru. Na konci vypíše, jaké desky jsou připojené.
 
 > 💡 Když `setup.bat` právě nainstaloval Python, **zavřete VS Code a otevřete ho znovu**. Jinak editor nový Python nenajde a tlačítka panelu nefungují.
 
@@ -216,6 +219,10 @@ mpy devices
 
 # 12. Výběr desky, když je připojeno víc desek (COM4, nebo auto = zrušit)
 mpy select
+
+# 13. Zmenšení souborů při nahrávání (off / simple / full / max) - šetří místo na micro:bitu
+#     (minify exclude lib/robot.py = tento soubor nezmenšovat; podrobně viz MicroBit.md)
+mpy minify simple
 ```
 
 > [!IMPORTANT]
@@ -329,4 +336,6 @@ Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, S
 | **`NameError: name '\ufeff...' isn't defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `mpy upload` na to upozorní. Ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8` a nahrajte znovu. |
 | **Po nahrání se nic neděje** | MicroPython po nahrání program nespouští. | Spusťte ho: `mpy reset` (nebo tlačítko RESET). |
 | **micro:bit: `SyntaxError: invalid syntax` hned po spuštění** | V programu je f-řetězec (`f"..."`) nebo jiná novinka, kterou starší MicroPython na micro:bitu nezná. | Texty skládejte pomocí `+` a `str()`. Řádek s chybou ukáže `mpy reset`. |
+| **`na desce doslo misto v ulozisti` (`No space left on device`)** | micro:bit má úložiště jen asi 20 kB. | `mpy list` ukáže, co na desce je; zapněte `mpy minify simple` (nebo `full`); před nahráním `mpy wipe`. Viz [MicroBit.md](MicroBit.md). |
+| **`chyba prenosu ... - opakuji (1/2)`** | Kód, který `mpremote` posílá na desku, dorazil poškozený (hlavně u micro:bitu). | Nic – `mpy` příkaz sám zopakuje. Opakuje se to stále? Zkuste jiný USB kabel nebo port. |
 | **MicroPython deska nenalezena** | Deska není připojená datovým kabelem, nebo je na ní CircuitPython. | `mpy devices` ukáže, co je připojené; na CircuitPython použijte `cpy`. |

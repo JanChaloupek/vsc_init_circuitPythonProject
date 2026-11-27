@@ -2,7 +2,7 @@
 # ============================================================
 # deska.py - nastroj pro praci s deskami s MicroPythonem a CircuitPythonem
 #
-# Verze: 2.5 (2026-11-27)
+# Verze: 2.6 (2026-11-27)
 #
 # K CEMU TO JE
 #   Jeden soubor, ktery umi nahrat program do desky, spustit ho,
@@ -71,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.5"
+SCRIPT_VERSION = "2.6"
 SCRIPT_DATE = "2026-11-27"
 
 
@@ -136,6 +136,37 @@ IS_WIN = sys.platform == "win32"
 HW_FILE = (Path(os.environ["LOCALAPPDATA"]) if IS_WIN and os.environ.get("LOCALAPPDATA")
            else Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")) / "deska" / "hw_desek.json"
 PICOED_BOARD_ID = "elecfreaks_picoed"           # Board ID v boot_out.txt (v1 i v2 stejne)
+
+# Nastaveni projektu, ktere patri do gitu (ucitel ho muze v sablone
+# prednastavit): zatim jen zmenseni souboru pri nahravani - zvlast pro
+# MicroPython a CircuitPython (prikazy mpy minify / cpy minify).
+PROJECT_SETTINGS = HERE / "deska.json"
+# Tyto soubory se nikdy nezmensuji: student je ladi a cisla radku
+# v chybovych hlaskach musi sedet se zdrojakem.
+NO_MINIFY = {"code.py", "main.py", "boot.py"}
+# Urovne zmenseni (python-minifier), jeden prepinac: mpy|cpy minify off|simple|full
+# - "simple" (jednoduche): odstrani komentare, dokumentacni retezce a mezery, jmena
+#   necha - chybova hlaska porad rika, o jakou promennou jde.
+# - "full" (plne): navic prejmenuje LOKALNI promenne (uvnitr funkci) na kratka
+#   jmena a opakovane konstanty da do promenne. Bezpecne i pro vic souboru:
+#   jmena, ktera vidi jine moduly (tridy, funkce, globalni promenne), zustanou.
+# - "max" (nejvetsi, jen mpy): main.py a mistni moduly, ktere importuje, slouci
+#   do jednoho main.py a prejmenuje v nem i tridy, funkce a globalni promenne
+#   (mp_merge_program). Chybove hlasky pak ukazuji nesmyslna jmena i radky -
+#   posledni zachrana, kdyz se program nevejde ani s "full".
+# Namereno na cely_projekt + program: 19.2 kB -> simple 12.9 kB -> full 10.8 kB
+# -> max 9.4 kB. Jmena ze seznamu "minify_keep" v deska.json se neprejmenuji
+# nikdy; soubory ze seznamu "minify_exclude" se nezmensuji (ani neslucuji).
+MINIFY_LEVELS = {
+    "simple": dict(remove_literal_statements=True, rename_locals=False, rename_globals=False,
+                   hoist_literals=False, remove_explicit_return_none=False),
+    "full": dict(remove_literal_statements=True, rename_locals=True, rename_globals=False,
+                 hoist_literals=True),
+    "max": dict(remove_literal_statements=True, rename_locals=True, rename_globals=True,
+                hoist_literals=True),
+}
+MINIFY_NAMES = {"simple": "jednoduche", "full": "plne", "max": "nejvetsi - slouceni do main.py"}
+MINIFY_ONLY_MPY = {"max"}       # slucovani umi jen mpy upload (cpy zapisuje soubor po souboru)
 
 # Virtualni prostredi projektu s knihovnami (vytvari ho setup.bat / setup.sh).
 VENV_DIR = PROJECT / ".venv"
@@ -1010,12 +1041,193 @@ def has_bom(path):
         return False
 
 
-def board_bytes(src):
-    """Obsah souboru tak, jak patri na desku: u .py bez BOM."""
+def load_project_settings():
+    """Nastaveni projektu z .vscode/deska.json (napr. {"minify": {"mpy": true}})."""
+    with contextlib.suppress(Exception):
+        data = json.loads(PROJECT_SETTINGS.read_text(encoding="utf-8-sig"))
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def minify_enabled(tool):
+    """Uroven zmenseni pro tento nastroj (mpy / cpy): "simple", "full", nebo ""
+    (vypnuto). Zapis true nebo "on" znamena "simple"."""
+    value = load_project_settings().get("minify", {}).get(tool)
+    if value is True or value == "on":
+        return "simple"
+    return value if value in MINIFY_LEVELS else ""
+
+
+def minify_keep():
+    """Jmena, ktera se pri zmenseni nikdy neprejmenuji (deska.json: minify_keep)."""
+    names = load_project_settings().get("minify_keep", [])
+    return [n for n in names if isinstance(n, str) and n.isidentifier()] if isinstance(names, list) else []
+
+
+def minify_exclude():
+    """Soubory, ktere se nezmensuji (deska.json: minify_exclude) - napr. knihovna,
+    ve ktere prave hledas chybu. Vzory jako v .ignoreCopy: 'robot.py' (jmeno
+    kdekoliv), 'lib/motor.py' (cesta v projektu), 'lib/*.py'."""
+    pats = load_project_settings().get("minify_exclude", [])
+    return [p for p in pats if isinstance(p, str) and p.strip()] if isinstance(pats, list) else []
+
+
+def minify_excluded(src):
+    """Je soubor vyrazeny ze zmenseni (NO_MINIFY nebo minify_exclude)?"""
+    if src.name in NO_MINIFY:
+        return True
+    try:
+        rel = src.resolve().relative_to(PROJECT.resolve()).as_posix()
+    except ValueError:
+        rel = src.name
+    return any(fnmatch.fnmatch(rel, p.replace("\\", "/").lstrip("./")) or fnmatch.fnmatch(src.name, p)
+               for p in minify_exclude())
+
+
+def save_project_settings(data):
+    PROJECT_SETTINGS.write_text(json.dumps(data, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def save_minify(tool, level):
+    data = load_project_settings()
+    data.setdefault("minify", {})[tool] = level if level in MINIFY_LEVELS else False
+    save_project_settings(data)
+
+
+def should_minify(src, tool):
+    return src.suffix.lower() == ".py" and not minify_excluded(src) and bool(minify_enabled(tool))
+
+
+_MINIFIED = {}          # vysledky v ramci jednoho spusteni (soubor se porovnava i kopiruje)
+_MINIFY_FAILED = set()
+
+
+def minify_source(data, name, level="simple"):
+    """Zmensi zdrojak Pythonu (MINIFY_LEVELS[level]). Kdyz to nejde (napr.
+    chyba v syntaxi), vrati puvodni obsah a jednou na to upozorni."""
+    keep = minify_keep()
+    key = (name, data, level, tuple(keep))
+    if key in _MINIFIED:
+        return _MINIFIED[key]
+    try:
+        import python_minifier
+    except ImportError:
+        raise missing_lib("python-minifier", " (pro zmenseni souboru, vypnuti: minify off)") from None
+    try:
+        out = python_minifier.minify(data.decode("utf-8"), filename=name, preserve_locals=keep,
+                                     preserve_globals=keep, **MINIFY_LEVELS[level]).encode("utf-8")
+    except Exception as e:                      # noqa: BLE001 - chyba v souboru studenta
+        if name not in _MINIFY_FAILED:
+            _MINIFY_FAILED.add(name)
+            warn(f"{name} nejde zmensit ({type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}) "
+                 "- nahravam ho beze zmeny.")
+        out = data
+    _MINIFIED[key] = out
+    return out
+
+
+def board_bytes(src, tool="cpy"):
+    """Obsah souboru tak, jak patri na desku: u .py bez BOM, a kdyz je pro
+    tento nastroj zapnute zmenseni (minify simple / full), tak zmenseny."""
     data = src.read_bytes()
     if src.suffix.lower() == ".py" and data.startswith(UTF8_BOM):
         data = data[len(UTF8_BOM):]
+    if should_minify(src, tool):
+        level = minify_enabled(tool)
+        # jednotlivy soubor nikdy s prejmenovanim globalnich jmen - to jde
+        # jen ve sloucenem main.py (mp_merge_program), jinak by se rozbily importy
+        data = minify_source(data, src.name, "full" if level == "max" else level)
     return data
+
+
+def mp_merge_program(main_file, search_dirs):
+    """Slouci main_file a mistni moduly, ktere importuje (i neprimo), do
+    jednoho zdrojaku (uroven minify max). Mistni modul = soubor <jmeno>.py
+    v search_dirs (koren projektu, lib/), ktery neni vyrazeny (minify_exclude).
+    Vraci (zdrojak, seznam sloucenych souboru). Kdyz slucovat nejde, vyhodi
+    CpyError s vysvetlenim (a co s tim)."""
+    import ast
+    modules = {}
+    for d in search_dirs:
+        for f in sorted(d.glob("*.py")) if d.is_dir() else []:
+            if f.stem not in modules and f.resolve() != main_file.resolve() and not (
+                    f.name not in NO_MINIFY and minify_excluded(f)):
+                modules[f.stem] = f
+    order, state, trees = [], {}, {}
+    HINT = " Pouzij 'from modul import jmeno', nebo nizsi uroven: mpy minify full."
+
+    def local(name):
+        return (name or "").split(".")[0] in modules
+
+    def visit(key, path, stack):
+        if state.get(key) == "hotovo":
+            return
+        if state.get(key) == "rozpracovano":
+            raise CpyError("Slouceni: kruhovy import " + " -> ".join(stack + [key]) + "." + HINT)
+        state[key] = "rozpracovano"
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=path.name)
+        top = set(map(id, tree.body))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level:
+                raise CpyError(f"Slouceni: {path.name}:{node.lineno} relativni import nejde sloucit.{HINT}")
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module]
+                if any(local(n) for n in names):
+                    if id(node) not in top:
+                        raise CpyError(f"Slouceni: {path.name}:{node.lineno} import mistniho modulu uvnitr "
+                                       f"funkce / podminky nejde sloucit.{HINT}")
+                    if isinstance(node, ast.Import):
+                        raise CpyError(f"Slouceni: {path.name}:{node.lineno} 'import {names[0]}' nejde "
+                                       f"sloucit (pouziti {names[0]}.neco).{HINT}")
+                    if any(a.name == "*" for a in node.names):
+                        raise CpyError(f"Slouceni: {path.name}:{node.lineno} 'from {node.module} import *' "
+                                       f"nejde sloucit.{HINT}")
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and local(node.module):
+                visit(node.module, modules[node.module], stack + [key])
+        state[key] = "hotovo"
+        trees[key] = (path, tree)
+        order.append(key)
+
+    visit("__main__", main_file, [])
+
+    def is_main_guard(node):
+        return (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+                and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__")
+
+    ext, body, defined = [], [], {}
+    for key in order:
+        path, tree = trees[key]
+        part = []
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                if isinstance(node, ast.ImportFrom) and local(node.module):
+                    # 'from m import a as b' -> po slouceni jen b = a
+                    part += [ast.parse(f"{a.asname} = {a.name}").body[0]
+                             for a in node.names if a.asname and a.asname != a.name]
+                    continue
+                line = ast.unparse(node)
+                if line not in ext:
+                    ext.append(line)
+                continue
+            if key != "__main__" and is_main_guard(node):
+                continue                        # vlastni test modulu - po slouceni by se spustil
+            names = []
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                names = [node.name]
+            elif isinstance(node, ast.Assign):
+                names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            for n in names:
+                if n in defined and defined[n] != path.name:
+                    raise CpyError(f"Slouceni: jmeno '{n}' je v {defined[n]} i v {path.name} - po slouceni "
+                                   f"by se prepsalo. Prejmenuj jedno z nich, nebo mpy minify full.")
+                defined[n] = path.name
+            part.append(node)
+        body.append((path, part))
+    out = ext + [ast.unparse(ast.Module(body=part, type_ignores=[])) for _p, part in body if part]
+    merged = [trees[k][0] for k in order if k != "__main__"]
+    return "\n".join(out) + "\n", merged
 
 
 def same_content(src, dst):
@@ -1735,6 +1947,7 @@ def cp_upload_files(board, opts, rels, title, rules_info=True):
                 else ".vscode/.ignoreCopy NEEXISTUJE - plati jen vestavene pojistky")
         if (PROJECT / CP_ENTRY).is_file() and CP_ENTRY not in rels:
             st.info("pozor:", f"{CP_ENTRY} je v .ignoreCopy - nenahraje se", "warn")
+    minify_report(st, "cpy", [PROJECT / r for r in rels])
     for rel in rels:
         if not (PROJECT / rel).is_file():
             st.fail(f"soubor '{rel}' v projektu neexistuje.")
@@ -1834,6 +2047,11 @@ def cp_save(board, opts):
     if not src.is_file():
         st.fail(f"soubor '{src}' neexistuje.", "byl mezitim prejmenovan nebo smazan?")
     st.info("velikost:", f"{src.stat().st_size} B, ulozen {_fmt_mtime(src)}")
+    if src.suffix.lower() == ".py" and minify_enabled("cpy"):
+        st.info("zmenseni:", minify_info("cpy"))
+        st.info("", ("tento soubor se NEZMENSI (" + ("vychozi - ladis ho" if src.name in NO_MINIFY
+                     else "minify exclude") + ")") if minify_excluded(src)
+                else f"tento soubor se zmensi: na desku jde {len(board_bytes(src))} B")
 
     # 2) Pravidla .ignoreCopy
     st.head("Pravidla (co se na desku nekopiruje)")
@@ -2555,12 +2773,32 @@ def mpremote_cmd(port, *args):
     return [TOOL_PY, "-m", "mpremote", "connect", port, *args]
 
 
+# Kdyz mpremote selze, z jeho vystupu se pozna proc (mp_failure). Nektere
+# chyby ma smysl zopakovat - hlavne na micro:bitu mpremote obcas skonci
+# chybou "SyntaxError: invalid syntax" v kodu, ktery SAM posila na desku
+# (kod dorazi poskozeny, nejspis rizeni toku pri prenosu; namereno asi u 3 %
+# prikazu) a tentyz prikaz napodruhe projde. Opakuji se jen nase vlastni
+# prikazy (exec nasich kodu, cp, ls, rm). 'run' (program studenta) ne -
+# tam muze byt SyntaxError opravdova chyba v programu.
+MP_RETRY_CMDS = {"exec", "cp", "fs", "ls", "rm"}
+MP_RETRIES = 2
+
+
 def mpremote(port, *args, capture=False, timeout=None):
-    """Spusti mpremote. capture=True: vystup se vrati misto vypsani."""
+    """Spusti mpremote. capture=True: vystup se vrati misto vypsani; chyba,
+    ktera jde zopakovat (viz mp_failure), se pred opakovanim vypise."""
     try:
         if capture:
-            return subprocess.run(mpremote_cmd(port, *args), capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=timeout)
+            for attempt in range(MP_RETRIES + 1):
+                r = subprocess.run(mpremote_cmd(port, *args), capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace", timeout=timeout)
+                if r.returncode == 0 or not args or args[0] not in MP_RETRY_CMDS:
+                    break
+                fail = mp_failure(r.stdout + r.stderr)
+                if not fail["retry"] or attempt == MP_RETRIES:
+                    break
+                warn(f"{fail['text']} - opakuji ({attempt + 1}/{MP_RETRIES})")
+            return r
         return subprocess.run(mpremote_cmd(port, *args), timeout=timeout)
     except subprocess.TimeoutExpired:
         raise CpyError("Deska neodpovedela vcas (mpremote).")
@@ -2684,9 +2922,10 @@ def mp_is_flat(port):
                for p in list_ports())
 
 
-def mp_cp_plan(items, flat):
+def mp_cp_plan(items, flat, root=PROJECT):
     """Argumenty pro mpremote (vsechno jednim spojenim, prikazy spojene '+'),
-    pocet nahravanych souboru a preskocene slozky.
+    pocet nahravanych souboru a preskocene slozky. root = odkud se kopiruje
+    (projekt, nebo docasna slozka se zmensenymi soubory - viz mp_stage).
     - Soubor se kopiruje pod svym jmenem (cil ':main.py', ne jen ':'):
       micro:bit by ho jinak ulozil pod prazdne jmeno.
     - Slozka: 'cp -r'. Na micro:bitu (flat) slozky nejsou - soubory ze
@@ -2699,7 +2938,7 @@ def mp_cp_plan(items, flat):
         args.extend(a)
 
     for item in items:
-        src = PROJECT / item
+        src = root / item
         if not src.exists():
             continue
         if src.is_file():
@@ -2710,7 +2949,7 @@ def mp_cp_plan(items, flat):
             count += sum(1 for f in src.rglob("*") if f.is_file())
         else:
             for f in sorted(src.iterdir()):
-                rel = f.relative_to(PROJECT).as_posix()
+                rel = f.relative_to(root).as_posix()
                 if f.is_file():
                     add("cp", rel, ":" + f.name)
                     count += 1
@@ -2719,28 +2958,176 @@ def mp_cp_plan(items, flat):
     return args, count, skipped
 
 
+@contextlib.contextmanager
+def mp_stage(items):
+    """Kdyz je zapnute zmenseni (mpy minify simple / full), pripravi kopii polozek do
+    docasne slozky: .py soubory zmensene a bez BOM, ostatni beze zmeny.
+    mpremote pak nahrava z ni (a porovnava se zmensenym obsahem, takze
+    nezmenene soubory porad preskoci). U urovne "max" je v kopii misto
+    main.py slouceny a zmenseny program a sloucene moduly v ni nejsou.
+    Vraci (koren, pocet zmensenych, puvodni velikost, nova velikost,
+    sloucene soubory)."""
+    level = minify_enabled("mpy")
+    if not level:
+        yield PROJECT, 0, 0, 0, []
+        return
+    import tempfile
+    tmp = Path(tempfile.mkdtemp(prefix="deska_mpy_"))
+    n, before, after = 0, 0, 0
+    merged_src, merged = None, []
+    main = PROJECT / MP_ENTRY
+    if level == "max" and MP_ENTRY in items and main.is_file():
+        merged_src, merged = mp_merge_program(main, [PROJECT, PROJECT / "lib"])
+    skip = {f.resolve() for f in merged}
+    try:
+        for item in items:
+            src = PROJECT / item
+            files = [src] if src.is_file() else [f for f in src.rglob("*")
+                                                 if f.is_file() and "__pycache__" not in f.parts]
+            for f in files:
+                if f.resolve() in skip:
+                    continue                    # je soucasti slouceneho main.py
+                rel = f.relative_to(PROJECT)
+                if merged_src is not None and f.resolve() == main.resolve():
+                    data = minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")
+                    n += 1 + len(merged)
+                    before += f.stat().st_size + sum(m.stat().st_size for m in merged)
+                    after += len(data)
+                else:
+                    data = board_bytes(f, "mpy")
+                    if should_minify(f, "mpy"):
+                        n += 1
+                        before += f.stat().st_size
+                        after += len(data)
+                (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp / rel).write_bytes(data)
+        yield tmp, n, before, after, merged
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def mp_run_cp(port, args, root, on_row, on_retry=None):
+    """Spusti mpremote s prikazy cp a vystup posila po radcich do on_row.
+    Chybu, kterou ma smysl opakovat (viz mp_failure), zopakuje - nezmenene
+    soubory se napodruhe preskoci. Pred opakovanim zavola on_retry(pokus,
+    chyba). Vraci (navratovy kod, posledni radky, chyba nebo None)."""
+    for attempt in range(MP_RETRIES + 1):
+        rows = []
+        proc = subprocess.Popen(mpremote_cmd(port, *args), cwd=str(root), stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+        for row in proc.stdout:                 # prubezne, at je videt kazdy soubor
+            row = row.rstrip()
+            if row:
+                rows.append(row)
+                on_row(row)
+        rc = proc.wait()
+        if rc == 0:
+            return rc, rows[-4:], None
+        fail = mp_failure("\n".join(rows))
+        if not fail["retry"] or attempt == MP_RETRIES:
+            return rc, rows[-4:], fail
+        if on_retry:
+            on_retry(attempt + 1, fail)
+    return rc, rows[-4:], fail
+
+
+# micro:bit v2: uloziste ma celkem asi 20 kB (namereno: 16 960 B volno
+# vedle 3 kB main.py). Misto se prideluje po blocich 128 B, z nichz asi
+# 126 B jsou data; prvni blok souboru nese i jeho jmeno. Soubor o 1 B tak
+# zabere 128 B. Kapacita micro:bitu v1 zatim nebyla zmerena.
+MICROBIT_FS_BLOCK = 128
+MICROBIT_FS_DATA = 126
+MICROBIT_V2_FS_SIZE = 20160
+
+
+def microbit_used(files):
+    """Odhad obsazeneho mista na micro:bitu: [(jmeno, velikost)] -> bajty."""
+    return sum(-(-(size + len(name) + 2) // MICROBIT_FS_DATA) * MICROBIT_FS_BLOCK for name, size in files)
+
+
+def microbit_space_text(files, machine=""):
+    used = microbit_used(files)
+    if "nRF52" in machine or not machine:      # v2 (nRF52833); bez udaje predpokladame v2
+        free = max(0, MICROBIT_V2_FS_SIZE - used)
+        return (f"obsazeno asi {fmt_size(used)} z asi {fmt_size(MICROBIT_V2_FS_SIZE)} "
+                f"(volno asi {fmt_size(free)}, {used * 100 // MICROBIT_V2_FS_SIZE} %)")
+    return f"obsazeno asi {fmt_size(used)} (kapacita micro:bitu v1 zatim nezmerena)"
+
+
+MP_NOSPACE_TIPS = ("co na desce je a kolik mista zabira: .\\mpy list (micro:bit ma jen asi 20 kB)",
+                   "zapni zmenseni souboru: .\\mpy minify simple (bez komentaru a dokumentace), nebo full (jeste mensi)",
+                   "smaz z desky, co nepotrebujes: .\\mpy wipe, a nahraj znovu")
+
+# Proc mpremote selhal - podle textu v jeho vystupu. Poradi je dulezite
+# (napr. MemoryError i "No space" prijdou i s Tracebackem). Polozky:
+# (hledane texty, druh, popis pro studenta, ma smysl opakovat, rady).
+MP_FAILURES = [
+    (("No space left", "ENOSPC", "Errno 28"), "misto",
+     "na desce doslo misto v ulozisti", False, MP_NOSPACE_TIPS),
+    (("MemoryError",), "ram",
+     "na desce dosla pamet RAM (MemoryError)", False,
+     ("program na desce mohl pamet zabrat: .\\mpy reset --hard a nahraj znovu",
+      "u velkeho souboru pomuze zmenseni: .\\mpy minify simple")),
+    (("failed to access", "in use", "Access is denied", "PermissionError", "could not open port",
+      "Resource busy", "Errno 13", "Errno 16"), "port",
+     "port je obsazeny jinym programem", False, MP_BUSY_TIPS),
+    (("could not enter raw repl",), "repl",
+     "deska neprijala prikaz (bezici program ji blokuje?)", True,
+     ("zkus .\\mpy reset --hard nebo tlacitko RESET na desce",)),
+    (("SyntaxError",), "prenos",
+     "chyba prenosu: kod, ktery mpremote poslal na desku, dorazil poskozeny (SyntaxError)", True,
+     ("opakuje se to? zkus jiny USB kabel nebo port",)),
+    (("TransportError", "SerialException", "disconnected", "timed out", "timeout",
+      "ClearCommError", "device reports readiness", "Errno 5"), "spojeni",
+     "spojeni s deskou se prerusilo", True,
+     ("je USB kabel dobre zapojeny? Neodpojila se deska?",)),
+]
+
+
+def mp_failure(text):
+    """Rozpozna z vystupu mpremote, proc prikaz selhal. Vraci slovnik
+    {kind, text, retry, tips, detail} - detail je posledni radek vystupu."""
+    rows = [r.strip() for r in (text or "").splitlines() if r.strip()]
+    detail = rows[-1] if rows else ""
+    for needles, kind, desc, retry, tips in MP_FAILURES:
+        if any(n.lower() in (text or "").lower() for n in needles):
+            return {"kind": kind, "text": desc, "retry": retry, "tips": tips, "detail": detail}
+    return {"kind": "jine", "text": "mpremote skoncil chybou", "retry": False,
+            "tips": MP_BUSY_TIPS, "detail": detail}
+
+
 def mp_copy(port, items):
     """Nahraje soubory a slozky jednim spojenim mpremote (prikazy spojene '+')."""
+    minify = minify_enabled("mpy")
     for item in items:
         src = PROJECT / item
         if not src.exists():
             say(col("ERROR", "error") + f": Preskakuji (nenalezeno): {item}")
             continue
         # mpremote kopiruje soubory beze zmeny, BOM tedy jen ohlasime
-        for f in ([src] if src.is_file() else sorted(src.rglob("*.py"))):
+        # (se zmensenim se BOM odstrani v docasne kopii)
+        for f in ([src] if src.is_file() or minify else sorted(src.rglob("*.py"))):
             if has_bom(f):
                 warn(f"{f.relative_to(PROJECT).as_posix()} je ulozeny jako 'UTF-8 with BOM' - "
                      f"na desce skonci chybou NameError ({BOM_HELP}).")
         say(("Nahravam slozku: " + col(item, "dir")) if src.is_dir() else ("Nahravam soubor: " + col(item, "file")))
-    args, _count, skipped = mp_cp_plan(items, mp_is_flat(port))
-    for s in skipped:
-        warn(f"Preskakuji {s}: micro:bit nema slozky (balicky na nem nefunguji).")
-    if not args:
-        raise CpyError("Neni co nahrat.")
-    line()
-    r = subprocess.run(mpremote_cmd(port, *args), cwd=str(PROJECT))
-    if r.returncode != 0:
-        raise CpyError("Nahravani selhalo.")
+    flat = mp_is_flat(port)
+    with mp_stage(items) as (root, n_min, before, after, merged):
+        if merged:
+            say(f"Slouceno do {MP_ENTRY}: " + ", ".join(m.name for m in merged) + " (mpy minify max)", "info")
+        if n_min:
+            say(f"Zmenseno {n_min} souboru: {fmt_size(before)} -> {fmt_size(after)} "
+                f"(mpy minify {minify_enabled('mpy')})", "info")
+        args, _count, skipped = mp_cp_plan(items, flat, root)
+        for s in skipped:
+            warn(f"Preskakuji {s}: micro:bit nema slozky (balicky na nem nefunguji).")
+        if not args:
+            raise CpyError("Neni co nahrat.")
+        line()
+        rc, last, fail = mp_run_cp(port, args, root, print,
+                                   lambda n, f: warn(f"Pokus {n} selhal: {f['text']} - opakuji ({n}/{MP_RETRIES})"))
+    if rc != 0:
+        raise CpyError(f"Nahravani selhalo: {fail['text']}." + "".join("\n       - " + t for t in fail["tips"]))
 
 
 def mp_upload_files(opts, items, title, source):
@@ -2750,6 +3137,11 @@ def mp_upload_files(opts, items, title, source):
     # 1) Co se nahrava
     st.head("Co se nahrava")
     st.info("seznam:", source)
+    mp_files = []
+    for item in items:
+        src = PROJECT / item
+        mp_files += [src] if src.is_file() else sorted(src.rglob("*.py")) if src.is_dir() else []
+    minify_report(st, "mpy", mp_files)
     existing, total_files = [], 0
     for item in items:
         src = PROJECT / item
@@ -2777,35 +3169,45 @@ def mp_upload_files(opts, items, title, source):
     # 3) Nahravani pres mpremote (vsechno jednim spojenim, prikazy spojene '+')
     st.head("Nahravani (mpremote)")
     flat = mp_is_flat(port)
-    args, total_files, skipped = mp_cp_plan(existing, flat)
     if flat:
         st.info("micro:bit:", "nema slozky - soubory jdou primo do korene desky")
-    for s in skipped:
-        st.info("preskoceno:", f"{s} - micro:bit nema slozky, balicky na nem nefunguji", "warn")
-    if not args:
-        st.fail("neni co nahrat.", f"zkontroluj {source}")
-    st.info("prikaz:", "mpremote connect " + port + " " + " ".join(args))
     t0 = time.monotonic()
-    up_to_date, last = 0, []
-    proc = subprocess.Popen(mpremote_cmd(port, *args), cwd=str(PROJECT), stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-    for row in proc.stdout:                     # prubezne, at je videt kazdy soubor
-        row = row.rstrip()
-        if not row:
-            continue
-        last = (last + [row])[-4:]
+    counts = {"up": 0}
+
+    def on_row(row):
         if row.startswith("Up to date:"):
-            up_to_date += 1
+            counts["up"] += 1
             st.info("beze zmeny:", row[len("Up to date:"):].strip().lstrip("./"))
         elif row.startswith("cp "):
             st.info("mpremote:", row)
         else:
             say("   | " + row)
-    rc = proc.wait()
+
+    def on_retry(n, fail):
+        counts["up"] = 0                        # pocita se jen posledni pokus
+        st.info("chyba:", f"pokus {n}: {fail['text']}", "warn")
+        if fail["detail"]:
+            st.info("", fail["detail"], "warn")
+        st.info("opakuji:", f"pokus {n + 1} z {MP_RETRIES + 1} (nezmenene soubory se preskoci)", "warn")
+
+    with mp_stage(existing) as (root, n_min, before, after, merged):
+        if merged:
+            st.info("slouceni:", f"do {MP_ENTRY}: " + ", ".join(m.name for m in merged)
+                    + " - na desku jde jen sloucene main.py (chyby ukazi zmenena jmena a radky)", "warn")
+        if n_min:
+            st.info("zmenseno:", f"{n_min} souboru {fmt_size(before)} -> {fmt_size(after)} "
+                    f"(usetreno {fmt_size(before - after)})")
+        args, total_files, skipped = mp_cp_plan(existing, flat, root)
+        for s in skipped:
+            st.info("preskoceno:", f"{s} - micro:bit nema slozky, balicky na nem nefunguji", "warn")
+        if not args:
+            st.fail("neni co nahrat.", f"zkontroluj {source}")
+        st.info("prikaz:", "mpremote connect " + port + " " + " ".join(args))
+        rc, last, fail = mp_run_cp(port, args, root, on_row, on_retry)
     if rc != 0:
-        st.fail(f"mpremote skoncil chybou (kod {rc}).", *last, *MP_BUSY_TIPS)
-    copied = max(0, total_files - up_to_date)
-    st.info("vysledek:", f"OK za {time.monotonic() - t0:.1f} s - nahrano {copied}, beze zmeny {up_to_date}")
+        st.fail(f"{fail['text']} (mpremote, kod {rc}).", *last, *fail["tips"])
+    copied = max(0, total_files - counts["up"])
+    st.info("vysledek:", f"OK za {time.monotonic() - t0:.1f} s - nahrano {copied}, beze zmeny {counts['up']}")
     st.done("Hotovo. MicroPython program po nahrani SAM NESPUSTI - spust ho tlacitkem "
             "'Spustit main.py' nebo .\\mpy reset.")
 
@@ -2837,7 +3239,7 @@ def mp_runmain(opts):
     if has_bom(src):                            # mpremote by poslal i BOM -> NameError
         import tempfile
         tmp = tempfile.NamedTemporaryFile("wb", suffix=".py", delete=False)
-        tmp.write(board_bytes(src))
+        tmp.write(board_bytes(src, "mpy"))
         tmp.close()
         run_file = Path(tmp.name)
     try:
@@ -2899,12 +3301,14 @@ if hasattr(os, 'mkdir'):
     tree = walk('/')
 else:
     tree = [('/', [], [(n, os.stat(n)[6]) for n in os.listdir()])]
+    print('@@FLAT', os.uname().machine)
 print('@@TREE', repr(tree))
 """
 
 
 def mp_tree(port):
-    """Nacte z desky seznam souboru a postavi z nej strom pro print_tree."""
+    """Nacte z desky seznam souboru a postavi z nej strom pro print_tree.
+    U micro:bitu (ploche uloziste) ma koren navic "flat" a "machine"."""
     import ast
     r = mpremote(port, "exec", MP_WALK_CODE, capture=True, timeout=30)
     out = r.stdout or ""
@@ -2914,7 +3318,9 @@ def mp_tree(port):
             raise ValueError
         data = ast.literal_eval(out[start + len("@@TREE"):].strip())
     except (ValueError, SyntaxError):
-        raise CpyError("Vypis souboru z desky se nepodaril.\n" + ((r.stderr or "") + out).strip()) from None
+        fail = mp_failure((r.stderr or "") + out)
+        raise CpyError(f"Vypis souboru z desky se nepodaril: {fail['text']}.\n"
+                       + ((r.stderr or "") + out).strip()) from None
     # soubor s prazdnym jmenem vznika na micro:bitu po 'cp soubor :' starsich verzi
     nodes = {path: {"files": sorted((f[0] or "(soubor bez jmena)", f[1]) for f in files), "dirs": [], "error": None}
              for path, _dirs, files in data}
@@ -2923,7 +3329,19 @@ def mp_tree(port):
             child = (path.rstrip("/") + "/" + d) if path != "/" else "/" + d
             if child in nodes:
                 nodes[path]["dirs"].append((d, nodes[child]))
-    return nodes.get("/", {"files": [], "dirs": [], "error": None})
+    root = nodes.get("/", {"files": [], "dirs": [], "error": None})
+    m = re.search(r"@@FLAT (.*)", out)
+    if m:
+        root["flat"], root["machine"] = True, m.group(1).strip()
+        # jmena, jak jsou opravdu na desce (vcetne prazdneho) - pro odhad mista
+        root["raw_files"] = [tuple(f) for _p, _d, files in data for f in files]
+    return root
+
+
+def say_microbit_space(tree, prefix=""):
+    """U micro:bitu vypise zaplneni uloziste (odhad podle bloku po 128 B)."""
+    if tree.get("flat"):
+        say(f"{prefix}Uloziste micro:bitu: {microbit_space_text(tree['raw_files'], tree.get('machine', ''))}")
 
 
 def mp_list(opts):
@@ -2931,9 +3349,11 @@ def mp_list(opts):
     port = mp_ready_port(opts)
     say("Obsah zarizeni:", "info")
     line()
-    stats = print_tree(mp_tree(port))
+    tree = mp_tree(port)
+    stats = print_tree(tree)
     line()
     say(f"Souboru: {stats['files']}, velikost {fmt_size(stats['bytes'])}")
+    say_microbit_space(tree)
 
 
 # Kod pro desku: rekurzivne smaze vsechny soubory a slozky.
@@ -3046,7 +3466,9 @@ def mp_setup(opts):
     say("")
     say("KROK 3/3: obsah desky", "info")
     line()
-    print_tree(mp_tree(port))
+    tree = mp_tree(port)
+    print_tree(tree)
+    say_microbit_space(tree)
     line("=")
     say("Deska je pripravena. Spustit program: mpy reset", "done")
 
@@ -3081,7 +3503,11 @@ def mp_check(opts):
         warn("Informace se nepodarilo nacist: " + (r.stderr or "").strip())
     line()
     say("3) Obsah zarizeni", "info")
-    print_tree(mp_tree(port))
+    tree = mp_tree(port)
+    print_tree(tree)
+    say_microbit_space(tree, "   ")
+    lv = minify_enabled('mpy')
+    say(f"   zmenseni souboru: {('ZAPNUTE - ' + MINIFY_NAMES[lv]) if lv else 'vypnute'} (prikaz mpy minify)")
     line()
     say("Diagnostika dokoncena.", "done")
 
@@ -3197,6 +3623,167 @@ def mp_select(opts):
     return 0
 
 
+# --- Zmenseni souboru pri nahravani (mpy minify / cpy minify) -----
+def minify_info(tool):
+    """Kratky popis nastaveni zmenseni: "vypnute", nebo uroven (a jmena,
+    ktera se neprejmenuji)."""
+    level = minify_enabled(tool)
+    if not level:
+        return "vypnute"
+    text = f"ZAPNUTE - {level} ({MINIFY_NAMES[level]})"
+    if minify_keep():
+        text += "; neprejmenovat: " + ", ".join(minify_keep())
+    return text
+
+
+def minify_split(tool, files):
+    """Rozdeli .py soubory na ty, ktere se zmensi, a ty, ktere ne (s duvodem).
+    Vraci (zmensi: [rel], nezmensi: [(rel, duvod)])."""
+    level = minify_enabled(tool)
+    yes, no = [], []
+    for f in files:
+        if f.suffix.lower() != ".py" or "__pycache__" in f.parts:
+            continue
+        try:
+            rel = f.resolve().relative_to(PROJECT.resolve()).as_posix()
+        except ValueError:
+            rel = f.name
+        if level == "max" and f.name == MP_ENTRY and f.parent.resolve() == PROJECT.resolve():
+            yes.append(rel + " (sloucene s moduly)")
+        elif f.name in NO_MINIFY:
+            no.append((rel, "vychozi - ladis ho"))
+        elif minify_excluded(f):
+            no.append((rel, "minify exclude"))
+        else:
+            yes.append(rel)
+    return yes, no
+
+
+def minify_report(st, tool, files):
+    """Do kroku Steps vypise nastaveni zmenseni: vypnute = jeden radek,
+    zapnute = uroven a co se zmensi / nezmensi."""
+    st.info("zmenseni:", minify_info(tool))
+    if not minify_enabled(tool):
+        return
+    yes, no = minify_split(tool, files)
+
+    def short(names):
+        return ", ".join(names[:8]) + (f" a dalsich {len(names) - 8}" if len(names) > 8 else "")
+    st.info("zmensi se:", short(yes) if yes else "nic")
+    if no:
+        st.info("nezmensi se:", short([f"{r} ({why})" for r, why in no]))
+
+
+def minify_cmd(tool, opts):
+    """mpy|cpy minify [off|simple|full|max]: zmenseni .py souboru pri nahravani.
+    Pamatuje se zvlast pro MicroPython a CircuitPython v .vscode/deska.json.
+    minify keep|unkeep <jmena>: jmena, ktera se nikdy neprejmenuji.
+    minify exclude|include <soubory>: soubory, ktere se nezmensuji.
+    Bez parametru ukaze stav a kolik by se v projektu usetrilo."""
+    name = "MicroPython (mpy)" if tool == "mpy" else "CircuitPython (cpy)"
+    arg = opts.args[0].lower() if opts.args else ""
+    levels = {"simple": "simple", "on": "simple", "zapnout": "simple", "1": "simple", "true": "simple",
+              "jednoduche": "simple", "full": "full", "plne": "full", "max": "max",
+              "off": "", "vypnout": "", "0": "", "false": ""}
+    if arg in levels:
+        if levels[arg] in MINIFY_ONLY_MPY and tool != "mpy":
+            raise CpyError(f"Uroven '{arg}' (slouceni do jednoho souboru) umi jen mpy. "
+                           "Pro CircuitPython pouzij cpy minify full.")
+        save_minify(tool, levels[arg])
+    elif arg in ("keep", "unkeep", "exclude", "include"):
+        data = load_project_settings()
+        key = "minify_keep" if arg in ("keep", "unkeep") else "minify_exclude"
+        items = [n for n in data.get(key, []) if isinstance(n, str)]
+        for n in opts.args[1:]:
+            if key == "minify_keep" and not n.isidentifier():
+                raise CpyError(f"'{n}' neni platne jmeno v Pythonu.")
+            n = n.replace("\\", "/")
+            if arg in ("keep", "exclude") and n not in items:
+                items.append(n)
+            elif arg in ("unkeep", "include") and n in items:
+                items.remove(n)
+        data[key] = sorted(items)
+        save_project_settings(data)
+    elif arg:
+        raise CpyError(f"Neznama volba '{arg}'. Pouziti: {tool} minify [off|simple|full"
+                       + ("|max" if tool == "mpy" else "") + f"], {tool} minify keep|unkeep <jmena>, "
+                       f"{tool} minify exclude|include <soubory>")
+    level = minify_enabled(tool)
+    say(f"Zmenseni souboru pro {name}: "
+        + (f"ZAPNUTE - {MINIFY_NAMES[level]} ({level})" if level else "vypnute"), "done")
+    say(f"   ulozeno v {PROJECT_SETTINGS.relative_to(PROJECT).as_posix()} (zvlast pro mpy a cpy)")
+    say("   simple (jednoduche): odstrani komentare, dokumentacni retezce a mezery, jmena zustanou")
+    say("   full   (plne)      : navic prejmenuje lokalni promenne ve funkcich a vytahne opakovane konstanty;")
+    say("                        tridy, funkce a globalni promenne zustanou (pouzivaji je jine soubory)")
+    if tool == "mpy":
+        say("   max    (nejvetsi)  : main.py a mistni moduly, ktere importuje, slouci do jednoho main.py a")
+        say("                        prejmenuje vse; chyby pak ukazuji nesmyslna jmena i radky - posledni zachrana")
+    say("   Na disku v projektu se nic nemeni - zmensuje se jen to, co jde na desku.")
+    say("   pozor: chyba v ZMENSENEM souboru ukaze jine cislo radku nez v editoru. Hledas-li chybu")
+    say(f"   v knihovne, vyrad ji: {tool} minify exclude lib/robot.py (zpet: {tool} minify include ...)")
+    say(f"   nezmensuje se: {', '.join(sorted(NO_MINIFY))}" + (" (u max se main.py slucuje)" if tool == "mpy" else "")
+        + (", " + ", ".join(minify_exclude()) if minify_exclude() else "") + "   (minify exclude)")
+    keep = minify_keep()
+    say("   neprejmenovat (minify keep): " + (", ".join(keep) if keep else "zadna jmena"))
+
+    # Kolik zabere na desce kazda uroven (vsechny .py soubory, ktere jdou na desku)
+    try:
+        import python_minifier  # noqa: F401
+    except ImportError:
+        warn("Chybi knihovna python-minifier - nahravani se zapnutym zmensenim skonci chybou.\n"
+             f"       {SETUP_HINT}\n       (rucne: {pip_cmd('python-minifier')})")
+        return 1 if level else 0
+    if tool == "mpy":
+        files = []
+        for item in mp_upload_items():
+            src = PROJECT / item
+            files += [src] if src.is_file() else [f for f in src.rglob("*.py")] if src.is_dir() else []
+    else:
+        files = [PROJECT / r for r in project_files()]
+    files = [f for f in files if f.suffix.lower() == ".py" and "__pycache__" not in f.parts]
+    if not files:
+        say("   v tomto projektu neni zadny .py soubor k nahrani.")
+        return 0
+    before = sum(len(board_bytes(f, "none")) for f in files)
+
+    def size(f, lv):
+        raw = board_bytes(f, "none")
+        return len(raw) if minify_excluded(f) else len(minify_source(raw, f.name, lv))
+
+    rows = [(lv, sum(size(f, lv) for f in files), "") for lv in ("simple", "full")]
+    main = PROJECT / MP_ENTRY
+    if tool == "mpy" and main in files:
+        try:
+            merged_src, merged = mp_merge_program(main, [PROJECT, PROJECT / "lib"])
+            gone = {m.resolve() for m in merged} | {main.resolve()}
+            total = len(minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")) + sum(
+                size(f, "full") for f in files if f.resolve() not in gone)
+            rows.append(("max", total, f" (slouci {len(merged)} modulu)"))
+        except CpyError as e:
+            rows.append(("max", None, " - nejde: " + str(e).replace("Slouceni: ", "")))
+    say(f"   na desku jde {len(files)} .py souboru, {fmt_size(before)}:")
+    for lv, after, note in rows:
+        mark = "   <- nastaveno" if lv == level else ""
+        if after is None:
+            say(f"      {lv:6}{note}{mark}")
+        else:
+            say(f"      {lv:6} -> {fmt_size(after):>9} (usetri {fmt_size(before - after)}, "
+                f"{(before - after) * 100 // max(1, before)} %){note}{mark}")
+    if not opts.args:
+        say(f"   nastavit: {tool} minify off | simple | full" + (" | max" if tool == "mpy" else ""))
+    return 0
+
+
+def cp_minify(board, opts):
+    """cpy minify [off|simple|full]: zmenseni .py souboru pri zapisu na CIRCUITPY."""
+    return minify_cmd("cpy", opts)
+
+
+def mp_minify(opts):
+    """mpy minify [off|simple|full|max]: zmenseni .py souboru pri nahravani (micro:bit!)."""
+    return minify_cmd("mpy", opts)
+
+
 # ============================================================
 # ODDIL 9  Napoveda, cteni parametru a hlavni funkce
 # ============================================================
@@ -3224,6 +3811,9 @@ HELP_MPY = """Pouziti: mpy <prikaz> [volby]          (v PowerShellu: .\\mpy <pri
   reset [--hard]        restart: spusti main.py (--hard = restart cele desky)
   plot                  zivy graf hodnot, ktere program vypisuje pres print()
   select [port|auto]    zvoli aktivni desku (nebo interaktivni vyber)
+  minify [off|simple|full|max]  zmenseni .py souboru pri nahravani (setri misto na micro:bitu)
+  minify keep <jmena>   jmena, ktera se pri zmenseni nikdy neprejmenuji (unkeep = odebrat)
+  minify exclude <soubory>  soubory, ktere se nezmensuji (include = vratit)
   devices               jake desky jsou pripojene
   help                  tato napoveda
 
@@ -3252,6 +3842,9 @@ Stejne prikazy jako mpy:
   reset [--hard]        znovu spusti code.py (--hard = restart cele desky)
   plot                  zivy graf hodnot, ktere program vypisuje pres print()
   select [disk|auto]    zvoli aktivni desku (nebo interaktivni vyber)
+  minify [off|simple|full]  zmenseni .py souboru pri zapisu na desku
+  minify keep <jmena>   jmena, ktera se pri zmenseni nikdy neprejmenuji (unkeep = odebrat)
+  minify exclude <soubory>  soubory, ktere se nezmensuji (include = vratit)
   devices               jake desky jsou pripojene
   help                  tato napoveda
 
@@ -3309,6 +3902,7 @@ CPY_COMMANDS = {
     "bootloader": (cp_bootloader, set()),
     "flash": (cp_flash, set()),
     "select": (cp_select, set()),
+    "minify": (cp_minify, set()),
     "sim": (cp_sim, set()),
     "test": (cp_test, set()),
 }
@@ -3326,6 +3920,7 @@ MPY_COMMANDS = {
     "reset": (mp_reset, {"hard"}),
     "plot": (mp_plot, {"seconds"}),
     "select": (mp_select, set()),
+    "minify": (mp_minify, set()),
     "sim": (mp_sim, {"pico"}),
     "test": (mp_test, set()),
 }

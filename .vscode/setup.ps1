@@ -167,19 +167,21 @@ Write-Host "--------------------------------------"
 # ------------------------------------------------------------
 # 3) Python knihovny do .venv
 # ------------------------------------------------------------
-Write-Host "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib)..." @ColorInfo
+Write-Host "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier)..." @ColorInfo
 
-& $VenvPy -c "import mpremote, serial" >$null 2>&1
+# Povinne: mpremote (MicroPython) a python-minifier (zmenseni souboru pri
+# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md)
+& $VenvPy -c "import mpremote, serial, python_minifier" >$null 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "mpremote nenalezen. Instaluji pres pip..." @ColorInfo
-    & $VenvPy -m pip install --disable-pip-version-check mpremote
+    Write-Host "mpremote / python-minifier nenalezen. Instaluji pres pip..." @ColorInfo
+    & $VenvPy -m pip install --disable-pip-version-check mpremote python-minifier
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Instalace mpremote selhala." @ColorError
+        Write-Host "Instalace mpremote / python-minifier selhala." @ColorError
         exit 1
     }
-    Write-Host "mpremote uspesne nainstalovan." @ColorDone
+    Write-Host "mpremote a python-minifier uspesne nainstalovany." @ColorDone
 } else {
-    Write-Host "mpremote OK" @ColorDone
+    Write-Host "mpremote a python-minifier OK" @ColorDone
 }
 
 # matplotlib je potreba jen pro graf (mpy plot / cpy plot)

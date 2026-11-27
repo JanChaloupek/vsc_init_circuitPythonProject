@@ -18,14 +18,14 @@ Spouštěče `mpy.cmd`, `cpy.cmd`, `mpy.sh` a `cpy.sh` mají jen pár řádků: 
 
 **Proč Python, a ne PowerShell a bash?**
 - Jeden soubor funguje ve Windows, Linuxu i macOS. Dřív byla každá věc napsaná dvakrát (`.ps1` a `.sh`) a obě verze se postupně rozcházely.
-- Python je potřeba stejně – `mpremote`, `pyserial` i `matplotlib` jsou Python knihovny.
+- Python je potřeba stejně – `mpremote`, `pyserial`, `python-minifier` i `matplotlib` jsou Python knihovny.
 - Odpadají potíže PowerShellu: zakázané spouštění skriptů (*ExecutionPolicy*) na školních počítačích nebo neviditelná značka BOM v dočasných souborech.
 
 Jen **`setup.ps1`** a **`setup.sh`** zůstaly v PowerShellu a bashi, protože musí umět nainstalovat samotný Python. `setup.ps1` ho na Windows nainstaluje jen pro uživatele (bez administrátora). `setup.sh` na Linuxu potřebuje systémový správce balíčků a `sudo`, proto nejdřív vypíše příkaz a zeptá se (`[a/N]`); bez terminálu nebo po odpovědi `n` příkaz jen vypíše. Na Ubuntu/Debianu doinstaluje i chybějící `python3.X-venv`.
 
 ### Knihovny ve virtuálním prostředí `.venv`
 
-`setup.bat` / `setup.sh` instalují knihovny (`mpremote`, `pyserial`, `matplotlib`) do složky **`.venv`** v kořeni projektu, ne do systémového Pythonu:
+`setup.bat` / `setup.sh` instalují knihovny (`mpremote`, `pyserial`, `python-minifier`, `matplotlib`) do složky **`.venv`** v kořeni projektu, ne do systémového Pythonu:
 - Novější Linuxy (Ubuntu 23.04+, Debian 12+) instalaci přes `pip` mimo virtuální prostředí odmítají (chyba `externally-managed-environment`).
 - Každý projekt má své knihovny a systémový Python zůstane čistý. Cena je asi 140 MB na projekt (hlavně `matplotlib` a `numpy`).
 
@@ -175,6 +175,11 @@ Soubory se kopírují s cílovým jménem (`cp main.py :main.py`, ne jen `cp mai
 - `mpy upload` místo `cp -r lib :` kopíruje soubory ze složky po jednom do kořene a podsložky přeskočí (`mp_cp_plan`).
 - `mpy list`, `wipe` a `check` posílají na desku kód, který vypíše seznam souborů jako zápis Pythonu (`repr`), ne jako JSON. Na PC ho načte `ast.literal_eval`.
 - Ostatní příkazy (`reset`, `repl`, `runmain`) fungují stejně jako u Pica.
+- `mpy list` a `mpy check` odhadnou zaplnění úložiště (`microbit_space_text`: bloky po 128 B, z nich 126 B dat, celkem asi 20 160 B u v2).
+
+Proč to tak je a naměřená čísla: [MicroBit.md](MicroBit.md).
+
+**Když `mpremote` selže**, funkce `mp_failure` z jeho výstupu pozná příčinu (tabulka `MP_FAILURES`: místo, RAM, obsazený port, deska neodpovídá, chyba přenosu, přerušené spojení). Před opakováním ji vypíše a opakuje (nejvýš `MP_RETRIES` = 2×) jen to, co má smysl: chybu přenosu (`SyntaxError` v kódu, který `mpremote` sám poslal – na micro:bitu asi 3 % příkazů), přerušené spojení a zablokovaný raw REPL. Opakují se jen interní příkazy (`exec`, `cp`, `ls`, `rm` – tabulka `MP_RETRY_CMDS`), ne `run` s programem studenta.
 
 ---
 
@@ -235,6 +240,26 @@ Panel je záměrně **rychlý přístup k základním akcím** (nahrát, spustit
 3. VS Code nabídne **Přenačíst okno** (nebo `F1` → `Developer: Reload Window`).
 
 Ostatní položky v `settings.json` (kontrola pravopisu, ...) příkaz `vscode` nemění.
+
+### Zmenšení souborů: `mpy minify` / `cpy minify`
+
+Jeden přepínač se stavy `off`, `simple`, `full` a (jen pro `mpy`) `max`, zvlášť pro `mpy` a `cpy`. Nastavení je v **`.vscode/deska.json`** (patří do gitu, učitel ho může v šabloně přednastavit):
+
+```json
+{
+    "minify": {"mpy": "simple", "cpy": false},
+    "minify_keep": ["jmeno_ktere_se_neprejmenuje"],
+    "minify_exclude": ["lib/robot.py"]
+}
+```
+
+- Zmenšuje knihovna `python-minifier` (povinná, instaluje ji setup) s volbami z `MINIFY_LEVELS`: `simple` odstraní komentáře, dokumentační řetězce a mezery; `full` navíc přejmenuje lokální proměnné a vytáhne opakované konstanty. Globální jména (třídy, funkce) se nepřejmenují nikdy, protože je importují jiné soubory. Jména z `minify_keep` (`minify keep` / `unkeep`) zůstanou vždy.
+- `main.py`, `code.py` a `boot.py` se nezmenšují (`NO_MINIFY`) – čísla řádků v chybách programu studenta musí sedět. Další soubory vyřadí `minify exclude <vzory>` (`minify_exclude`, funkce `minify_excluded`; vzory jako v `.ignoreCopy`).
+- **`max`** (`mp_merge_program`): přes modul `ast` projde `main.py` a místní moduly, které importuje (`from modul import ...`, soubory v kořeni a v `lib/`), a sloučí je v pořadí podle závislostí. Importy cizích modulů dá nahoru (bez duplicit), `from m import a as b` nahradí přiřazením `b = a` a vynechá bloky `if __name__ == "__main__":` importovaných modulů. Odmítne `import modul`, `import *`, vnořené a relativní importy, kruhy a kolize jmen. Výsledek zmenší s `rename_globals=True`. Jednotlivé soubory se při `max` zmenšují jako `full`.
+- Nahrávání vždy vypíše nastavení (`minify_report`): vypnuto = jeden řádek, zapnuto = úroveň a seznam, co se zmenší a co ne (a proč).
+- **CircuitPython:** zmenšení je ve funkci `board_bytes()` – tu používá porovnání s deskou (`same_content`) i zápis (`copy_file`), takže `cpy upload` i `cpy save` (Run on Save) porovnávají zmenšený obsah a nezměněné soubory dál přeskočí.
+- **MicroPython:** `mp_stage()` připraví do dočasné složky kopii nahrávaných položek se zmenšenými `.py` soubory a `mpremote` nahrává z ní. Jeho porovnání (`Up to date`) tak funguje stejně.
+- Soubor, který zmenšit nejde (např. chyba v syntaxi), se nahraje beze změny a `deska.py` na to jednou upozorní.
 
 ### Nápověda Pylance: `pyrightconfig.json`
 

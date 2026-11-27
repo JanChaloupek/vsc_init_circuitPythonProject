@@ -142,7 +142,19 @@
         "rucne",
         "vybrana",
         "vychozi",
-        "aktivni"
+        "aktivni",
+        "listdir",
+        "unkeep",
+        "robotprogramming",
+        "hashlib",
+        "Předpřeložené",
+        "zdrojáku",
+        "zdroják",
+        "repr",
+        "misync",
+        "LOCALAPPDATA",
+        "Dockeru",
+        "necommitujte"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"

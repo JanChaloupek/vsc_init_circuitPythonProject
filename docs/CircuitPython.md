@@ -64,7 +64,7 @@ Před první prací spusťte jednorázový instalační skript:
 - **Na Windows:** dvojklikem spusťte **`setup.bat`** v kořeni projektu.
 - **Na Linuxu a macOS:** v terminálu spusťte **`./setup.sh`**. Tady je **povinný**: nastavení je připravené pro Windows (příkaz `python`) a skript ho přepíše na `python3`. Bez něj nefunguje nahrávání po `Ctrl+S` ani tlačítka panelu.
 
-Skript na Windows v případě potřeby nainstaluje Python. Ve složce projektu vytvoří virtuální prostředí **`.venv`** a nainstaluje do něj Python knihovny (`mpremote`, který obsahuje i `pyserial`, a `matplotlib` pro graf). Knihovny tak patří jen k tomuto projektu a nástroje `cpy` a `mpy` si `.venv` najdou samy. Dál skript nainstaluje rozšíření VS Code a nastaví tlačítka panelu i automatické nahrávání po `Ctrl+S`. Na konci vypíše, jaké desky jsou připojené.
+Skript na Windows v případě potřeby nainstaluje Python. Ve složce projektu vytvoří virtuální prostředí **`.venv`** a nainstaluje do něj Python knihovny (`mpremote`, který obsahuje i `pyserial`, `python-minifier` pro zmenšení souborů a `matplotlib` pro graf). Knihovny tak patří jen k tomuto projektu a nástroje `cpy` a `mpy` si `.venv` najdou samy. Dál skript nainstaluje rozšíření VS Code a nastaví tlačítka panelu i automatické nahrávání po `Ctrl+S`. Na konci vypíše, jaké desky jsou připojené.
 
 > 💡 Když `setup.bat` právě nainstaloval Python, **zavřete VS Code a otevřete ho znovu**. Jinak editor nový Python nenajde a nefunguje `Ctrl+S` ani tlačítka panelu.
 
@@ -214,6 +214,10 @@ cpy devices
 
 # 12. Výběr desky, když je připojeno víc desek (F:, COM5, nebo auto = zrušit)
 cpy select
+
+# 13. Zmenšení .py souborů při zápisu na desku (off / simple / full) - obvykle není potřeba
+#     (cpy minify exclude robot.py = tento soubor nezmenšovat)
+cpy minify
 ```
 
 ### B) Příkazy jen pro CircuitPython

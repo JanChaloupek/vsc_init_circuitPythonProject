@@ -3,6 +3,7 @@
 Podrobné návody:
 - 📘 **[Návod: Práce s MicroPythonem (GUI & CLI)](docs/MicroPython.md)**
 - 📙 **[Návod: Práce s CircuitPythonem (GUI & CLI)](docs/CircuitPython.md)**
+- 🟦 **[MicroPython na BBC micro:bitu: jak se chová a na co si dát pozor](docs/MicroBit.md)**
 - 🔧 **[Jak fungují nástroje mpy a cpy (pro zvědavé a pro správce projektu)](docs/Nastroje.md)**
 
 Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **CircuitPythonu** (desky Pico:ed v1 a v2) i **MicroPythonu** (Pico:ed v2, BBC micro:bit a Raspberry Pi Pico) v editoru **Visual Studio Code**.
@@ -46,7 +47,7 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 |---|---|
 | **`code.py`** | výchozí program pro **CircuitPython** (blikání LED, nápis na displeji) |
 | **`main.py`** | výchozí program pro **MicroPython** |
-| **`docs/`** | podrobné návody: `CircuitPython.md`, `MicroPython.md`, `Nastroje.md` (na desku se nenahrávají) |
+| **`docs/`** | podrobné návody: `CircuitPython.md`, `MicroPython.md`, `MicroBit.md`, `Nastroje.md` (na desku se nenahrávají) |
 | **`lib/`** | knihovny pro desku; `picoed_v2_lib/` je knihovna pro Pico:ed v2 s MicroPythonem (displej, tlačítka, LED, bzučák, ultrazvuk) |
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
@@ -54,14 +55,14 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 | **`pyrightconfig.json`** | nastavení nápovědy Pylance: kde hledat knihovny (`lib/`) a typové stuby (`pc/_stubs`) |
 | **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` (CircuitPython) a `pc/tests_mpy` (MicroPython) a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
 | **`.gitignore`** | co se neukládá do gitu |
-| **`.venv/`** | Python knihovny projektu (`mpremote`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
+| **`.venv/`** | Python knihovny projektu (`mpremote`, `python-minifier`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
 
 ### Složka `.vscode/`
 
 | Soubor | K čemu je |
 |---|---|
 | **`deska.py`** | **všechny nástroje v jednom souboru**: příkazy `mpy` (MicroPython přes `mpremote`), `cpy` (CircuitPython – přímý zápis na disk `CIRCUITPY`), přehled desek `devices`, graf hodnot `plot` a nastavení panelu `vscode`. Funguje stejně ve Windows, Linuxu i macOS. |
-| **`setup.ps1`** / **`setup.sh`** | instalace Pythonu (Windows), virtuální prostředí `.venv` s knihovnami `mpremote` a `matplotlib`, rozšíření VS Code; nastavení panelu a Run on Save |
+| **`setup.ps1`** / **`setup.sh`** | instalace Pythonu (Windows), virtuální prostředí `.venv` s knihovnami `mpremote`, `python-minifier` a `matplotlib`, rozšíření VS Code; nastavení panelu a Run on Save |
 | **`settings.json`** | nastavení editoru, tlačítek panelu a Run on Save (tlačítka a Run on Save zapisuje `deska.py vscode`) |
 | **`extensions.json`** | doporučená rozšíření VS Code |
 | **`.ignoreCopy`** | co se **nenahrává** na CircuitPython desku (pro `Ctrl+S` i `cpy upload`) |

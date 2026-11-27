@@ -207,16 +207,18 @@ echo "--------------------------------------"
 # ------------------------------------------------------------
 # 3) Python knihovny do .venv
 # ------------------------------------------------------------
-echo "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib)..."
-if "$VENV_PY" -c "import mpremote, serial" &>/dev/null; then
-    echo "mpremote OK"
+echo "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier)..."
+# Povinne: mpremote (MicroPython) a python-minifier (zmenseni souboru pri
+# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md)
+if "$VENV_PY" -c "import mpremote, serial, python_minifier" &>/dev/null; then
+    echo "mpremote a python-minifier OK"
 else
-    echo "mpremote nenalezen. Instaluji pres pip..."
-    if ! "$VENV_PY" -m pip install --disable-pip-version-check mpremote; then
-        echo "ERROR: Instalace mpremote selhala."
+    echo "mpremote / python-minifier nenalezen. Instaluji pres pip..."
+    if ! "$VENV_PY" -m pip install --disable-pip-version-check mpremote python-minifier; then
+        echo "ERROR: Instalace mpremote / python-minifier selhala."
         exit 1
     fi
-    echo "mpremote uspesne nainstalovan."
+    echo "mpremote a python-minifier uspesne nainstalovany."
 fi
 
 # matplotlib je potreba jen pro graf (mpy plot / cpy plot)
