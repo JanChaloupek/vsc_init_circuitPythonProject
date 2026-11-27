@@ -2,7 +2,7 @@
 # ============================================================
 # deska.py - nastroj pro praci s deskami s MicroPythonem a CircuitPythonem
 #
-# Verze: 2.4 (2026-11-26)
+# Verze: 2.5 (2026-11-27)
 #
 # K CEMU TO JE
 #   Jeden soubor, ktery umi nahrat program do desky, spustit ho,
@@ -71,8 +71,8 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.4"
-SCRIPT_DATE = "2026-11-26"
+SCRIPT_VERSION = "2.5"
+SCRIPT_DATE = "2026-11-27"
 
 
 # ============================================================
@@ -129,6 +129,13 @@ SYSTEM_ENTRIES = {"System Volume Information", ".fseventsd", ".Trashes", ".Trash
 #   NO_COLOR=1         bez barev
 DEBUG = bool(os.environ.get("CPY_DEBUG"))
 IS_WIN = sys.platform == "win32"
+
+# Zjistene verze hardwaru desek (Pico:ed v1 / v2) podle UID desky. Soubor je
+# u uzivatele, ne v projektu: deska svou verzi nezmeni a pouziva se ve vice
+# projektech (Windows: %LOCALAPPDATA%\deska, Linux/macOS: ~/.cache/deska).
+HW_FILE = (Path(os.environ["LOCALAPPDATA"]) if IS_WIN and os.environ.get("LOCALAPPDATA")
+           else Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")) / "deska" / "hw_desek.json"
+PICOED_BOARD_ID = "elecfreaks_picoed"           # Board ID v boot_out.txt (v1 i v2 stejne)
 
 # Virtualni prostredi projektu s knihovnami (vytvari ho setup.bat / setup.sh).
 VENV_DIR = PROJECT / ".venv"
@@ -507,6 +514,31 @@ def save_active_target(platform, target):
             ACTIVE_FILE.unlink()
 
 
+def load_hw():
+    """Vsechny zapamatovane verze hardwaru: {UID: {"board_id", "hw", "date"}}."""
+    with contextlib.suppress(Exception):
+        data = json.loads(HW_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def hw_of(uid):
+    """Zapamatovana verze hardwaru desky (napr. 'v2') podle UID, nebo None.
+    UID je i seriove cislo USB portu, takze se najde bez otevreni portu -
+    a plati i po prehrani desky na MicroPython (stejny cip = stejne UID)."""
+    rec = load_hw().get(uid.upper()) if uid else None
+    return rec.get("hw") if isinstance(rec, dict) else None
+
+
+def save_hw(uid, board_id, hw):
+    data = load_hw()
+    data[uid.upper()] = {"board_id": board_id, "hw": hw, "date": time.strftime("%Y-%m-%d")}
+    with contextlib.suppress(OSError):
+        HW_FILE.parent.mkdir(parents=True, exist_ok=True)
+        HW_FILE.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 class Board:
     """Jedna deska s CircuitPythonem: jeji disk a seriovy port.
     Obe se hledaji az ve chvili, kdy je potreba (a jen jednou)."""
@@ -805,6 +837,45 @@ class Repl:
         self.close()
 
 
+# Pico:ed v1 a v2 maji stejne USB VID:PID i stejny firmware (Board ID
+# elecfreaks_picoed). Lisi se zapojenim pinu GP0 / GP1: v2 na nich ma vnitrni
+# sbernici I2C displeje s vnejsimi pull-up rezistory, v1 ma na GP0 bzucak.
+# Test: pin jako vstup s vnitrnim pull-down - s vnejsim pull-upem precte 1,
+# bez nej 0. Nic se neposila ani nevysila a bzucak mlci. (Overeno na 2x v2
+# a 1x v1, shodne se skenem I2C: v2 ma displej 0x74 na GP0/GP1, v1 na P19/P20.)
+PICOED_HW_SNIPPET = """
+import digitalio, microcontroller, time
+def _pu(pin):
+    p = digitalio.DigitalInOut(pin)
+    p.switch_to_input(pull=digitalio.Pull.DOWN)
+    time.sleep(0.001)
+    v = p.value
+    p.deinit()
+    return v
+print("PICOED_HW", "v2" if _pu(microcontroller.pin.GPIO0) and _pu(microcontroller.pin.GPIO1) else "v1")
+"""
+
+
+def picoed_hw_learn(repl, info):
+    """Zjisti verzi hardwaru Pico:ed, kdyz jeste neni zapamatovana. Deska uz
+    musi cekat v REPL (program zastaveny). info = read_boot_out().
+    Vraci (verze, "zapamatovana" | "zjistena") nebo (None, None)."""
+    if info.get("board_id") != PICOED_BOARD_ID or not info.get("uid"):
+        return None, None
+    known = hw_of(info["uid"])
+    if known:
+        return known, "zapamatovana"
+    try:
+        out = repl.run_snippet(PICOED_HW_SNIPPET)
+    except CpyError:
+        return None, None
+    m = re.search(r"PICOED_HW (v[12])", out)
+    if not m:
+        return None, None
+    save_hw(info["uid"], info["board_id"], m.group(1))
+    return m.group(1), "zjistena"
+
+
 def terminal(ser, on_exit_hint=""):
     """Jednoduchy terminal: co prijde z desky, vypise; co napises, posle.
     Konec: Ctrl+].  Ctrl+C se posila do desky (prerusi program)."""
@@ -1037,12 +1108,21 @@ def collect_devices():
         info = read_boot_out(d)
         same = ports_for_uid(info["uid"], ports)
         used.update(p.device for p in same)
+        name = info["line"].split(";")[-1].strip() if ";" in info["line"] else info["board_id"]
+        note = None if same else "seriovy port nenalezen"
+        # Verze hardwaru Pico:ed jen ze souboru HW_FILE (port se neotevira);
+        # zjisti se pri cpy check nebo cpy reset (tlacitko Restart v panelu).
+        hw = hw_of(info["uid"]) if info["board_id"] == PICOED_BOARD_ID else None
+        if hw:
+            name += f" (HW {hw})"
+        elif info["board_id"] == PICOED_BOARD_ID and not note:
+            note = "verze HW (v1 / v2) zatim nezjistena - zjisti ji Restart programu nebo cpy check"
         devices.append({
             "platform": "circuitpython", "tool": "cpy",
             "port": same[0].device if same else None, "drive": str(d),
-            "name": info["line"].split(";")[-1].strip() if ";" in info["line"] else info["board_id"],
+            "name": name,
             "firmware": info["line"].split(";")[0].strip() if info["line"] else None,
-            "note": None if same else "seriovy port nenalezen",
+            "note": note, "hw": hw,
         })
     for p in ports:
         if p.device not in used and known_name(p, CP_DEVICES):
@@ -1055,10 +1135,17 @@ def collect_devices():
     for p in ports:
         if p.device not in used and is_micropython_port(p):
             used.add(p.device)
+            name = known_name(p, MP_DEVICES) or p.description
+            # Deska, ktera uz jednou mela CircuitPython, je zname i po prehrani
+            # na MicroPython: seriove cislo portu = UID cipu.
+            rec = load_hw().get((p.serial_number or "").upper())
+            hw = rec.get("hw") if isinstance(rec, dict) and rec.get("board_id") == PICOED_BOARD_ID else None
+            if hw:
+                name = f"ELECFREAKS Pico:ed (MicroPython) (HW {hw})"
             devices.append({
                 "platform": "micropython", "tool": "mpy", "port": p.device, "drive": None,
-                "name": known_name(p, MP_DEVICES) or p.description, "firmware": None,
-                "note": None, "usb": vidpid(p),
+                "name": name, "firmware": None,
+                "note": None, "usb": vidpid(p), "hw": hw,
             })
     for d in find_drives(BOOT_LABEL):
         devices.append({
@@ -1462,6 +1549,9 @@ def board_paused(board, reload_after=True):
             repl = Repl(port)
             repl.interrupt()
             say("Program na desce zastaven (deska ceka v REPL).", "info")
+            hw, how = picoed_hw_learn(repl, board.boot_info())
+            if how == "zjistena":
+                say(f"Verze HW: Pico:ed {hw} (zjistena a zapamatovana k UID desky).", "info")
         except CpyError as e:
             if repl:
                 repl.close()
@@ -1593,8 +1683,10 @@ def open_repl_step(st, port):
                 "nebo Thonny v jinem okne?")
 
 
-def interrupt_step(st, repl):
-    """Ctrl+C: zastavi program a dostane desku do REPL."""
+def interrupt_step(st, repl, board=None):
+    """Ctrl+C: zastavi program a dostane desku do REPL. S board navic
+    zjisti verzi hardwaru Pico:ed, pokud jeste neni zapamatovana
+    (program uz stoji, takze to nic dalsiho neprerusi)."""
     try:
         banner = repl.interrupt()
     except CpyError as e:
@@ -1602,6 +1694,10 @@ def interrupt_step(st, repl):
     st.info("Ctrl+C:", "program zastaven, deska ceka v REPL")
     if b"safe mode" in banner.lower():
         st.info("pozor:", "deska je v NOUZOVEM REZIMU (safe mode) - viz .\\cpy check", "warn")
+    elif board:
+        hw, how = picoed_hw_learn(repl, board.boot_info())
+        if how == "zjistena":
+            st.info("verze HW:", f"Pico:ed {hw} (zjistena a zapamatovana k UID desky)", "done")
     return banner
 
 
@@ -1844,7 +1940,7 @@ def cp_repl(board, opts):
     port = cp_step_port(st, board)
     st.head("Zastaveni programu")
     with open_repl_step(st, port) as repl:
-        banner = interrupt_step(st, repl)
+        banner = interrupt_step(st, repl, board)
         st.head("Konzole")
         st.info("konec:", "Ctrl+]  (program na desce pak stoji)")
         st.info("Ctrl+D:", "restart code.py")
@@ -1927,6 +2023,10 @@ def cp_check(board, opts):
         say(f"   firmware: {boot['line'] or '(boot_out.txt chybi)'}")
         if boot["board_id"]:
             say(f"   deska   : {boot['board_id']}   UID {boot['uid']}")
+        if boot["board_id"] == PICOED_BOARD_ID:
+            hw = hw_of(boot["uid"])
+            say(f"   verze HW: Pico:ed {hw} (zapamatovana, {HW_FILE})" if hw
+                else "   verze HW: zatim nezjistena - zjisti se v kroku 3 (test REPL)")
         if (drive / CP_ENTRY).is_file():
             say(f"   {CP_ENTRY:<8}: OK ({(drive / CP_ENTRY).stat().st_size} B)")
         elif (drive / "main.py").is_file():
@@ -1976,6 +2076,10 @@ def cp_check(board, opts):
                     if row.strip():
                         say("   " + row.rstrip())
                 say("   REPL OK", "done")
+                hw, how = picoed_hw_learn(repl, board.boot_info())
+                if how == "zjistena":
+                    say(f"   verze HW: Pico:ed {hw} (zjistena podle pull-up rezistoru na GP0/GP1, "
+                        "zapamatovana k UID desky)", "done")
                 if "VYPNUTY" in out:
                     warn("Autoreload je vypnuty - zapis na disk novy kod nespusti "
                          "(pouzij cpy upload --stop nebo cpy reset).")
@@ -2123,7 +2227,7 @@ def cp_reset(board, opts):
         uid = board.boot_info()["uid"]
         st.head("Restart cele desky (microcontroller.reset)")
         with open_repl_step(st, port) as repl:
-            interrupt_step(st, repl)
+            interrupt_step(st, repl, board)
             repl.fire_and_forget("import microcontroller\nmicrocontroller.reset()\n")
 
         def back():
@@ -2139,7 +2243,7 @@ def cp_reset(board, opts):
 
     st.head("Restart programu")
     with open_repl_step(st, port) as repl:
-        interrupt_step(st, repl)
+        interrupt_step(st, repl, board)
         if not repl.soft_reload():
             st.fail("deska na Ctrl+D neodpovedela.", "zkus .\\cpy reset --hard nebo tlacitko RESET na desce")
         st.info("Ctrl+D:", "mekky restart - CircuitPython spousti code.py")

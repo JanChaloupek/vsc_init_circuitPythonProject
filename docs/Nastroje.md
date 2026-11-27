@@ -70,6 +70,20 @@ MicroPython  (prikazy mpy)
 
 **Deska s MicroPythonem** má jen sériový port. Najde se podle VID:PID.
 
+### Verze desky Pico:ed (v1 / v2)
+
+Pico:ed v1 a v2 mají stejné USB VID:PID (`2E8A:1026`) i stejný firmware (`Board ID:elecfreaks_picoed` v `boot_out.txt`), takže je bez spuštění kódu na desce rozlišit nejde. Liší se zapojením pinů GP0 a GP1:
+
+| | v1 | v2 |
+|---|---|---|
+| GP0 / GP1 | bzučák na GP0 (`board.BUZZER_GP0`), bez pull-up rezistorů | vnitřní sběrnice I2C displeje (`board.I2C0_SDA` / `I2C0_SCL`) s pull-up rezistory |
+| displej IS31FL3731 (adresa `0x74`) | na sběrnici okraje P19 / P20 (`board.SCL` / `SDA`) | na GP0 / GP1 |
+| bzučák | GP0 | GP3 (`board.BUZZER`) |
+
+`deska.py` proto na desce na chvíli nastaví GP0 a GP1 jako vstup s vnitřním pull-down a přečte je (`PICOED_HW_SNIPPET`): obě 1 = pull-upy = **v2**, jinak **v1**. Nic se neposílá po sběrnici a bzučák mlčí. Program na desce přitom musí stát, proto se verze zjišťuje jen v příkazech, které program zastavují tak jako tak – `cpy check`, `cpy reset` (tlačítko *Restartovat program*), `cpy repl` a příkazy s `--stop` – a jen jednou: výsledek se uloží k UID desky do souboru `hw_desek.json` u uživatele (Windows `%LOCALAPPDATA%\deska`, Linux a macOS `~/.cache/deska`), ne do projektu – deska svou verzi nezmění a používá se v různých projektech.
+
+`devices` (a tedy i panel) verzi jen čte z tohoto souboru, port neotevírá: u desky vypíše `(HW v1)` / `(HW v2)` a v `devices --json` pole `hw`. U desky, jejíž verze ještě není známá, je poznámka, jak ji zjistit. UID je zároveň sériové číslo USB portu, takže verzi pozná i deska přehraná na MicroPython (`ELECFREAKS Pico:ed (MicroPython) (HW v2)`).
+
 ### Víc desek stejného druhu
 
 Bez dalšího nastavení se použije první nalezená deska. Jinou vyberete třemi způsoby:

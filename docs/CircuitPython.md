@@ -197,7 +197,7 @@ cpy list
 # 6. Smazání všech souborů z desky (s potvrzením; --format = přeformátování disku)
 cpy wipe
 
-# 7. Diagnostika: disk, verze firmwaru, port, test REPL, nouzový režim
+# 7. Diagnostika: disk, verze firmwaru, verze desky Pico:ed (v1 / v2), port, test REPL, nouzový režim
 cpy check
 
 # 8. Kompletní příprava desky (Wipe -> Upload -> List)
