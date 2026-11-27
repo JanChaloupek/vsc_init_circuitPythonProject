@@ -407,6 +407,28 @@ def ctrl_c_to_child():
         signal.signal(signal.SIGINT, old)
 
 
+@contextlib.contextmanager
+def ctrl_c_as_key():
+    """Ve Windows behem konzole (REPL) bude Ctrl+C obycejna klavesa (znak 0x03),
+    ne signal. Signal by jinak dostal i cmd.exe, ve kterem bezi mpy.cmd/cpy.cmd,
+    a po konci REPLu by se ptal 'Terminate batch job (Y/N)?'.
+    Znak 0x03 precte terminal (nas i mpremote) a posle ho do desky."""
+    if not IS_WIN:
+        yield
+        return
+    import ctypes
+    k = ctypes.windll.kernel32
+    h = k.GetStdHandle(-10)                         # stdin
+    mode = ctypes.c_uint32()
+    changed = bool(k.GetConsoleMode(h, ctypes.byref(mode))) and \
+        bool(k.SetConsoleMode(h, mode.value & ~0x0001))   # bez ENABLE_PROCESSED_INPUT
+    try:
+        yield
+    finally:
+        if changed:
+            k.SetConsoleMode(h, mode.value)
+
+
 # ============================================================
 # ODDIL 3  Hledani desek (USB disky, seriove porty)
 # ============================================================
@@ -929,42 +951,43 @@ def terminal(ser, on_exit_hint=""):
     t = threading.Thread(target=reader, daemon=True)
     t.start()
     try:
-        if IS_WIN:
-            import msvcrt
-            while not stop.is_set():
-                try:
-                    if not msvcrt.kbhit():
-                        time.sleep(0.01)
-                        continue
-                    ch = msvcrt.getwch()
-                except KeyboardInterrupt:
-                    ser.write(b"\x03")
-                    continue
-                if ch == "\x1d":                # Ctrl+]
-                    break
-                if ch in ("\x00", "\xe0"):      # specialni klavesa (sipka, ...)
-                    seq = WIN_KEYS.get(msvcrt.getwch())
-                    if seq:
-                        ser.write(seq)
-                    continue
-                ser.write(ch.encode("utf-8"))
-        else:
-            import select
-            import termios
-            import tty
-            fd = sys.stdin.fileno()
-            old = termios.tcgetattr(fd)
-            tty.setraw(fd)
-            try:
+        with ctrl_c_as_key():
+            if IS_WIN:
+                import msvcrt
                 while not stop.is_set():
-                    r, _, _ = select.select([fd], [], [], 0.05)
-                    if r:
-                        data = os.read(fd, 64)
-                        if b"\x1d" in data:
-                            break
-                        ser.write(data)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+                    try:
+                        if not msvcrt.kbhit():
+                            time.sleep(0.01)
+                            continue
+                        ch = msvcrt.getwch()
+                    except KeyboardInterrupt:
+                        ser.write(b"\x03")
+                        continue
+                    if ch == "\x1d":                # Ctrl+]
+                        break
+                    if ch in ("\x00", "\xe0"):      # specialni klavesa (sipka, ...)
+                        seq = WIN_KEYS.get(msvcrt.getwch())
+                        if seq:
+                            ser.write(seq)
+                        continue
+                    ser.write(ch.encode("utf-8"))
+            else:
+                import select
+                import termios
+                import tty
+                fd = sys.stdin.fileno()
+                old = termios.tcgetattr(fd)
+                tty.setraw(fd)
+                try:
+                    while not stop.is_set():
+                        r, _, _ = select.select([fd], [], [], 0.05)
+                        if r:
+                            data = os.read(fd, 64)
+                            if b"\x1d" in data:
+                                break
+                            ser.write(data)
+                finally:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old)
     finally:
         stop.set()
         t.join(0.5)
@@ -3254,6 +3277,20 @@ def mp_runmain(opts):
     say(f"{src.name} dokoncen.", "done")
 
 
+def mp_leave_raw_repl(port):
+    """Vrati desku z raw REPL do bezne konzole (Ctrl+B).
+    mpremote po kazdem prikazu raw REPL opousti, ale micro:bit (DAPLink)
+    tento posledni znak casto nedostane - port se zavre driv, nez ho prevodnik
+    preda (namereno asi 4 ze 6 pokusu). Konzole by pak ukazala 'OK>' misto
+    '>>>' a nereagovala by. V bezne konzoli Ctrl+B jen vypise uvodni text."""
+    with contextlib.suppress(Exception):
+        import serial
+        with serial.Serial(port, 115200, timeout=0.3) as ser:
+            ser.write(b"\x02")
+            time.sleep(0.3)                     # cas, aby znak dorazil
+            ser.read(ser.in_waiting or 1)
+
+
 def mp_repl(opts):
     """mpy repl: interaktivni konzole (konec Ctrl+])."""
     st = Steps("Konzole (REPL) desky s MicroPythonem")
@@ -3263,7 +3300,8 @@ def mp_repl(opts):
     st.info("Ctrl+C:", "preruseni prikazu / programu")
     st.info("Ctrl+D:", "restart - spusti main.py")
     line()
-    with ctrl_c_to_child():
+    mp_leave_raw_repl(port)
+    with ctrl_c_to_child(), ctrl_c_as_key():
         r = subprocess.run(mpremote_cmd(port, "repl"))
     if r.returncode != 0:
         st.fail(f"REPL skoncil chybou (kod {r.returncode}).", *MP_BUSY_TIPS)

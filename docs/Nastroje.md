@@ -159,7 +159,7 @@ MicroPython deska nemá USB disk, takže `mpy` všechno dělá přes nástroj **
 |---|---|
 | `mpy upload`, `mpy main` | `mpremote connect COM4 cp main.py : + cp -r lib :` – víc příkazů spojených `+` v jednom spojení |
 | `mpy runmain` | `mpremote connect COM4 run main.py` |
-| `mpy repl` | `mpremote connect COM4 repl` |
+| `mpy repl` | `mpremote connect COM4 repl` – `Ctrl+C` je v konzoli obyčejná klávesa (`ctrl_c_as_key`), ne signál. Jinak by ho dostal i `cmd.exe`, ve kterém běží `mpy.cmd`, a po konci konzole by se ptal *Terminate batch job (Y/N)?* |
 | `mpy list`, `mpy wipe`, `mpy check` | `mpremote connect COM4 exec "<krátký program>"` – program na desce projde soubory a vypíše je jako JSON |
 | `mpy reset --hard` | `mpremote connect COM4 reset` |
 | `mpy reset` | přímo po sériové lince: `Ctrl+C`, `Ctrl+B`, `Ctrl+D` |
@@ -175,6 +175,7 @@ Soubory se kopírují s cílovým jménem (`cp main.py :main.py`, ne jen `cp mai
 - `mpy upload` místo `cp -r lib :` kopíruje soubory ze složky po jednom do kořene a podsložky přeskočí (`mp_cp_plan`).
 - `mpy list`, `wipe` a `check` posílají na desku kód, který vypíše seznam souborů jako zápis Pythonu (`repr`), ne jako JSON. Na PC ho načte `ast.literal_eval`.
 - Ostatní příkazy (`reset`, `repl`, `runmain`) fungují stejně jako u Pica.
+- `mpremote` po každém příkazu raw REPL opouští (`Ctrl+B`), ale micro:bit tento poslední znak často nedostane: port se zavře dřív, než ho převodník na desce předá (naměřeno asi 4 z 6 pokusů). Konzole by pak místo `>>>` ukázala `OK>` a nereagovala. Proto `mpy repl` před spuštěním `mpremote repl` pošle `Ctrl+B` sám a chvíli počká (`mp_leave_raw_repl`).
 - `mpy list` a `mpy check` odhadnou zaplnění úložiště (`microbit_space_text`: bloky po 128 B, z nich 126 B dat, celkem asi 20 160 B u v2).
 
 Proč to tak je a naměřená čísla: [MicroBit.md](MicroBit.md).
