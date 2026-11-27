@@ -1126,6 +1126,45 @@ _MINIFIED = {}          # vysledky v ramci jednoho spusteni (soubor se porovnava
 _MINIFY_FAILED = set()
 
 
+# Neukonceny konflikt z gitu (po merge / pull): git do souboru vlozi radky
+# '<<<<<<< HEAD', '=======' a '>>>>>>> vetev'. Takovy soubor nejde spustit.
+GIT_CONFLICT_RE = re.compile(r"^(<{7}|>{7})(?: |$)", re.M)
+GIT_CONFLICT_TIPS = (
+    "otevri soubor ve VS Code: nad kazdym konfliktem vyber Accept Current Change (tva verze), "
+    "Accept Incoming Change (druha verze) nebo Accept Both Changes",
+    "zkontroluj, ze v souboru nezustal zadny radek <<<<<<<, ======= ani >>>>>>>, a uloz ho",
+    "pak konflikt dokonci v gitu: Source Control -> + (stage) -> Commit",
+)
+
+
+def git_conflict_line(path):
+    """Cislo prvniho radku se znackou konfliktu z gitu, nebo None."""
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return None
+    m = GIT_CONFLICT_RE.search(text)
+    return text.count("\n", 0, m.start()) + 1 if m else None
+
+
+def git_conflict_step(st, files):
+    """Krok 1 nahravani: soubor .py s neukoncenym konfliktem z gitu nema smysl
+    nahravat (na desce skonci chybou) - zastavi s vysvetlenim, co delat."""
+    bad = [(f, n) for f in files if f.suffix.lower() == ".py" for n in [git_conflict_line(f)] if n]
+    if bad:
+        where = ", ".join(f"{f.relative_to(PROJECT).as_posix()} (radek {n})" for f, n in bad)
+        st.fail(f"neukonceny konflikt z gitu: {where}.", *GIT_CONFLICT_TIPS)
+
+
+def py_syntax_text(path, text, e):
+    """Srozumitelny popis chyby v syntaxi souboru (SyntaxError e)."""
+    rel = path.relative_to(PROJECT).as_posix() if path.is_relative_to(PROJECT) else path.name
+    m = GIT_CONFLICT_RE.search(text)
+    if m:
+        return f"{rel}: na radku {text.count(chr(10), 0, m.start()) + 1} je neukonceny konflikt z gitu."
+    return f"{rel}:{e.lineno}: chyba v syntaxi ({e.msg})."
+
+
 def minify_source(data, name, level="simple"):
     """Zmensi zdrojak Pythonu (MINIFY_LEVELS[level]). Kdyz to nejde (napr.
     chyba v syntaxi), vrati puvodni obsah a jednou na to upozorni."""
@@ -1189,7 +1228,15 @@ def mp_merge_program(main_file, search_dirs):
         if state.get(key) == "rozpracovano":
             raise CpyError("Slouceni: kruhovy import " + " -> ".join(stack + [key]) + "." + HINT)
         state[key] = "rozpracovano"
-        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=path.name)
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+        try:
+            tree = ast.parse(text, filename=path.name)
+        except SyntaxError as e:
+            conflict = GIT_CONFLICT_RE.search(text)
+            raise CpyError("Slouceni: " + py_syntax_text(path, text, e)
+                           + "".join(f"\n       - {t}" for t in (GIT_CONFLICT_TIPS if conflict else (
+                               "oprav chybu v souboru (radek vyse), nebo nahraj bez slouceni: mpy minify full",)))
+                           ) from None
         top = set(map(id, tree.body))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.level:
@@ -1970,6 +2017,7 @@ def cp_upload_files(board, opts, rels, title, rules_info=True):
                 else ".vscode/.ignoreCopy NEEXISTUJE - plati jen vestavene pojistky")
         if (PROJECT / CP_ENTRY).is_file() and CP_ENTRY not in rels:
             st.info("pozor:", f"{CP_ENTRY} je v .ignoreCopy - nenahraje se", "warn")
+    git_conflict_step(st, [PROJECT / r for r in rels if (PROJECT / r).is_file()])
     minify_report(st, "cpy", [PROJECT / r for r in rels])
     for rel in rels:
         if not (PROJECT / rel).is_file():
@@ -3164,6 +3212,7 @@ def mp_upload_files(opts, items, title, source):
     for item in items:
         src = PROJECT / item
         mp_files += [src] if src.is_file() else sorted(src.rglob("*.py")) if src.is_dir() else []
+    git_conflict_step(st, mp_files)
     minify_report(st, "mpy", mp_files)
     existing, total_files = [], 0
     for item in items:
@@ -3798,7 +3847,7 @@ def minify_cmd(tool, opts):
                 size(f, "full") for f in files if f.resolve() not in gone)
             rows.append(("max", total, f" (slouci {len(merged)} modulu)"))
         except CpyError as e:
-            rows.append(("max", None, " - nejde: " + str(e).replace("Slouceni: ", "")))
+            rows.append(("max", None, " - nejde: " + str(e).splitlines()[0].replace("Slouceni: ", "")))
     say(f"   na desku jde {len(files)} .py souboru, {fmt_size(before)}:")
     for lv, after, note in rows:
         mark = "   <- nastaveno" if lv == level else ""
