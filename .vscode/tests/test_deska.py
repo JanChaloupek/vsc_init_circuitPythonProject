@@ -379,10 +379,40 @@ def offline_tests(proj):
             and "emeraldwalk.runonsave" in data, out)
     rc, out = run(proj, "cpy", "sim", timeout=60)
     R.check("cpy sim: lib/ a lib_cpy/ v ceste, program dobehne", rc == 0 and MARK_CPY in out, out)
-    rc, out = run(proj, "mpy", "sim", timeout=60)
-    R.check("mpy sim: lib/ a lib_mpy/ v ceste, program dobehne", rc == 0 and MARK_PICO in out, out)
+    rc, out = run(proj, "mpy", "sim", "--picoed", timeout=60)
+    R.check("mpy sim --picoed: lib/ a lib_mpy/ v ceste, program dobehne", rc == 0 and MARK_PICO in out, out)
     rc, out = run(proj, "mpy", "sim", "--pico", timeout=60)
     R.check("mpy sim --pico", rc == 0 and MARK_PICO in out, out)
+    rc, out = run(proj, "mpy", "sim", "--microbit", timeout=60)
+    R.check("mpy sim --microbit: bez knihoven (micro:bit nema slozky), program dobehne",
+            rc == 0 and MARK_MICROBIT in out and "BBC micro:bit" in out, out)
+    # bez volby: podle pripojene desky (micro:bit -> micro:bit, jinak Pico:ed)
+    rc, out = run(proj, "mpy", "sim", timeout=60)
+    R.check("mpy sim bez volby: deska podle pripojene, program dobehne", rc == 0 and (
+        (MARK_MICROBIT in out and "podle pripojene desky" in out)
+        or (MARK_PICO in out and "Pico:ed v2 (vychozi" in out)), out)
+    (proj / "sim_microbit.py").write_text(
+        "from microbit import *\n"
+        "import music\n"
+        "import radio\n"
+        "from neopixel import NeoPixel\n"
+        "display.show(Image.HEART)\n"
+        "display.scroll('Ahoj', delay=10)\n"
+        "pin8.write_digital(1)\n"
+        "music.play(music.BA_DING)\n"
+        "radio.on()\n"
+        "radio.send('zprava')\n"
+        "np = NeoPixel(pin16, 1)\n"
+        "np[0] = (255, 0, 0)\n"
+        "np.show()\n", encoding="utf-8")
+    rc, out = run(proj, "mpy", "sim", "sim_microbit.py", "--microbit", timeout=60)
+    R.check("mpy sim --microbit: displej, piny, music, radio, neopixel v konzoli", rc == 0 and all(
+        t in out for t in ("#####", 'Displej: text "Ahoj"', "Pin P8: 1", "melodie music.BA_DING",
+                           'Radio: odeslano "zprava"', "NeoPixel: #ff0000")), out)
+    rc, out = run(proj, "mpy", "sim", "sim_microbit.py", "--picoed", timeout=60)
+    R.check("mpy sim --picoed: modul microbit neni (jako na Picu)",
+            rc == 1 and "No module named 'microbit'" in out, out)
+    (proj / "sim_microbit.py").unlink()
     (proj / "jen_v_cpy.py").write_text("import jen_mpy\n", encoding="utf-8")
     rc, out = run(proj, "cpy", "sim", "jen_v_cpy.py", timeout=60)
     R.check("cpy sim: knihovna z lib_mpy/ neni k dispozici (jako na desce)", rc == 1 and "jen_mpy" in out, out)

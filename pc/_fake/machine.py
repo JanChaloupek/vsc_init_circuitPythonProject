@@ -192,6 +192,8 @@ def nastav_desku(nazev="picoed"):
 
 
 def _reset():
+    if _rezim.deska == "microbit":      # simuluje se micro:bit - tento machine se nepouziva
+        return
     nastav_desku(_deska.nazev if _deska else "picoed")
 
 

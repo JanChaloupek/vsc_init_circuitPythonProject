@@ -71,7 +71,7 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.7"
+SCRIPT_VERSION = "2.8"
 SCRIPT_DATE = "2026-11-28"
 
 
@@ -3140,8 +3140,9 @@ FAKE_MODULES = {
     # potrebuje adafruit_ticks, picoed potrebuje board, digitalio a busio.
     "cpy": ["adafruit_ticks", "time", "board", "digitalio", "analogio",
             "busio", "pwmio", "neopixel", "picoed"],
-    # utime = time MicroPythonu (sleep_ms, ticks_ms, ...), machine = Pin, I2C, PWM, Timer
-    "mpy": ["adafruit_ticks", "utime", "micropython", "machine"],
+    # utime = time MicroPythonu (sleep_ms, ticks_ms, ...). Moduly desky (machine
+    # na Picu; microbit, music, neopixel, radio na micro:bitu) vybira pc/_fake/_desky.py.
+    "mpy": ["adafruit_ticks", "utime", "micropython"],
 }
 # MicroPython zna nektere moduly i pod jmenem s "u" (utime, ujson, ...)
 MPY_ALIASES = {"time": "utime", "uasyncio": "asyncio", "ujson": "json", "ure": "re",
@@ -3149,7 +3150,8 @@ MPY_ALIASES = {"time": "utime", "uasyncio": "asyncio", "ujson": "json", "ure": "
                "uio": "io", "ubinascii": "binascii", "uhashlib": "hashlib",
                "urandom": "random", "uselect": "select", "uos": "os", "usys": "sys"}
 PC_PLATFORMS = {"cpy": ("CircuitPython", CP_ENTRY, "tests"), "mpy": ("MicroPython", MP_ENTRY, "tests_mpy")}
-PC_BOARDS = {"picoed": "ELECFREAKS Pico:ed v2", "pico": "Raspberry Pi Pico"}
+PC_BOARDS = {"picoed": "ELECFREAKS Pico:ed v2", "pico": "Raspberry Pi Pico", "microbit": "BBC micro:bit v2"}
+PC_BOARD_PROFILE = {"picoed": "pico", "pico": "pico", "microbit": "microbit"}     # sekce upload.toml
 
 
 def pc_hardware(rezim, platforma="cpy", deska="picoed"):
@@ -3161,8 +3163,9 @@ def pc_hardware(rezim, platforma="cpy", deska="picoed"):
         raise CpyError(f"Chybi slozka {PC_DIR / '_fake'} s falesnym hardwarem.")
     # Hledani modulu: program studenta a jeho moduly (koren projektu),
     # knihovny (jako /lib na desce: slozky z LIB_DIRS, ktere podle upload.toml
-    # jdou na tuto desku - napr. lib/ a lib_mpy/), pc/ (_fake, tests, simulace)
-    libs = [PROJECT / d for d in profile_lib_dirs("cpy" if platforma == "cpy" else "pico")]
+    # jdou na tuto desku - napr. lib/ a lib_mpy/), pc/ (_fake, tests, simulace).
+    # U MicroPythonu knihovny prida _desky.py podle simulovane desky.
+    libs = [PROJECT / d for d in profile_lib_dirs("cpy")] if platforma == "cpy" else []
     for p in (PC_DIR, *reversed(libs), PROJECT):
         if str(p) not in sys.path:
             sys.path.insert(0, str(p))
@@ -3173,10 +3176,21 @@ def pc_hardware(rezim, platforma="cpy", deska="picoed"):
     if platforma == "mpy":
         for alias, name in MPY_ALIASES.items():
             sys.modules[alias] = sys.modules.get(name) or importlib.import_module(name)
-        sys.modules["machine"].nastav_desku(deska)
-        # lib_mpy/picoed_v2_lib: displej a bzucak oznamuji jen vysledek (text, melodii)
-        importlib.import_module("_fake._mp_knihovny").obal()
+        knihovny = {d: [PROJECT / x for x in profile_lib_dirs(prof)] for d, prof in PC_BOARD_PROFILE.items()}
+        importlib.import_module("_fake._desky").priprav(PROJECT, knihovny, deska)
     return rezim_modul
+
+
+def pc_sim_board(opts):
+    """Simulovana deska MicroPythonu a proc: volba --picoed / --pico / --microbit,
+    jinak podle pripojene (vybrane) desky - micro:bit -> micro:bit, jinak Pico:ed.
+    Port se neotevira (jen seznam USB zarizeni)."""
+    for deska in PC_BOARDS:
+        if opts.has(deska):
+            return deska, f"volba --{deska}"
+    if mp_guess_profile(opts) == "microbit":
+        return "microbit", "podle pripojene desky"
+    return "picoed", "vychozi"
 
 
 def pc_sim(platforma, opts):
@@ -3188,15 +3202,16 @@ def pc_sim(platforma, opts):
     program = PROJECT / rel
     if not program.is_file():
         raise CpyError(f"Soubor {rel} nenalezen.")
-    deska = "pico" if opts.has("pico") else "picoed"
+    deska, proc = pc_sim_board(opts) if platforma == "mpy" else ("picoed", "")
     rezim = pc_hardware("sim", platforma, deska)
     from simulace import konzole
     klavesy = konzole.spust(rezim)
     say(f"Simulace {rel} na PC ({jmeno}, falesny hardware z pc/_fake, deska se nepouziva).", "info")
     if platforma == "mpy":
-        say(f"   Simulovana deska: {PC_BOARDS[deska]}" + ("" if opts.has("pico") else
-            "   (--pico = Raspberry Pi Pico)"))
-    say("   Klavesy: a / b = tlacitko A / B, q nebo Ctrl+C = konec." if klavesy
+        jine = ", ".join("--" + d for d in PC_BOARDS if d != deska)
+        say(f"   Simulovana deska: {PC_BOARDS[deska]} ({proc}; jina: {jine})")
+    logo = ", l = dotyk loga" if deska == "microbit" and platforma == "mpy" else ""
+    say(f"   Klavesy: a / b = tlacitko A / B{logo}, q nebo Ctrl+C = konec." if klavesy
         else "   Konec: Ctrl+C. (Klavesy a/b nefunguji - vstup neni terminal.)")
     line()
     try:
@@ -3235,9 +3250,12 @@ def pc_test(platforma, opts):
     rezim = pc_hardware("test", platforma)
     import unittest
     ticks = sys.modules["adafruit_ticks"]
+    desky = sys.modules.get("_fake._desky")     # jen MicroPython
 
     class Vysledek(unittest.TextTestResult):
         def startTest(self, test):
+            if desky:
+                desky.nastav(desky.vychozi)     # test si mohl vybrat jinou desku (micro:bit)
             rezim.resetuj()             # hardware do vychoziho stavu (machine: piny, casovace)
             ticks.set_ticks_ms(0)       # kazdy test zacina v case 0
             super().startTest(test)
@@ -4443,9 +4461,13 @@ HELP_MPY = """Pouziti: mpy <prikaz> [volby]          (v PowerShellu: .\\mpy <pri
   help                  tato napoveda
 
 Na PC bez desky (falesny hardware z pc/_fake):
-  sim [soubor] [--pico] simulace programu (main.py) na Pico:ed v2 (--pico = Raspberry Pi Pico):
-                        vypisuje LED, displej, bzucak; klavesy a / b = tlacitko A / B, q = konec
-  test [vzor]           unit testy z pc/tests_mpy (jen soubory podle vzoru, napr. test_main)
+  sim [soubor]          simulace programu (main.py): vypisuje LED, displej, bzucak;
+                        klavesy a / b = tlacitko A / B (micro:bit: l = logo), q = konec
+      --picoed | --pico | --microbit   simulovana deska: ELECFREAKS Pico:ed v2,
+                        Raspberry Pi Pico, BBC micro:bit v2 (bez volby podle pripojene
+                        desky: micro:bit -> micro:bit, jinak Pico:ed)
+  test [vzor]           unit testy z pc/tests_mpy (jen soubory podle vzoru, napr. test_main);
+                        testy bezi na Pico:ed, test si muze vybrat micro:bit (viz pc/tests_mpy)
 
 Volby:
   --port COMx           port desky (jinak automaticky; promenna MICROPYTHON_PORT)
@@ -4549,7 +4571,7 @@ MPY_COMMANDS = {
     "select": (mp_select, set()),
     "minify": (mp_minify, set()),
     "files": (mp_files, set()),
-    "sim": (mp_sim, {"pico"}),
+    "sim": (mp_sim, {"picoed", "pico", "microbit"}),
     "test": (mp_test, set()),
 }
 VALUE_OPTIONS = {"--port": "port", "-p": "port", "--drive": "drive", "-d": "drive"}

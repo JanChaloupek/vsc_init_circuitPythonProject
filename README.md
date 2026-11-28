@@ -30,14 +30,14 @@ Tento repozitář obsahuje výchozí připravenou strukturu pro vývoj v **Circu
 
 ## Simulace a testy na PC (bez desky)
 
-Program jde vyzkoušet i bez robota. Moduly desky se nahradí falešnými verzemi ze složky `pc/_fake` – pro CircuitPython `board`, `digitalio`, `picoed`, `time`, …, pro MicroPython `machine`, `time`, `micropython`:
+Program jde vyzkoušet i bez robota. Moduly desky se nahradí falešnými verzemi ze složky `pc/_fake` – pro CircuitPython `board`, `digitalio`, `picoed`, `time`, …, pro MicroPython `machine`, `time`, `micropython` a pro BBC micro:bit `microbit`, `music`, `neopixel`, `radio`:
 
 | Příkaz | Co dělá |
 |---|---|
 | **`.\cpy sim`** | spustí `code.py` (nebo jiný soubor: `.\cpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák, NeoPixel. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
 | **`.\cpy test`** | spustí unit testy programu `code.py` z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
-| **`.\mpy sim`** | totéž pro `main.py` (MicroPython). Falešný modul `machine` simuluje desku Pico:ed v2 (displej, tlačítka A / B, LED, bzučák) a knihovna `lib_mpy/picoed_v2_lib` běží beze změny. `.\mpy sim --pico` simuluje Raspberry Pi Pico. |
-| **`.\mpy test`** | unit testy programu `main.py` ze složky `pc/tests_mpy` (falešný `machine` má pro testy pomocné funkce, např. `machine.stiskni("a")`, `machine.historie(25)`). |
+| **`.\mpy sim`** | totéž pro `main.py` (MicroPython). Simuluje se deska, která je připojená: s micro:bitem **BBC micro:bit v2** (modul `microbit`: displej 5 × 5, tlačítka A / B, piny, I2C; klávesa `l` = dotyk loga), jinak **Pico:ed v2** (falešný `machine`, knihovna `lib_mpy/picoed_v2_lib` běží beze změny). Jinou desku vybere `--microbit`, `--picoed` nebo `--pico` (Raspberry Pi Pico). |
+| **`.\mpy test`** | unit testy programu `main.py` ze složky `pc/tests_mpy` (falešný `machine` má pro testy pomocné funkce, např. `machine.stiskni("a")`, `machine.historie(25)`). Testy běží na Pico:ed; test pro micro:bit si desku vybere sám – ukázka je v `pc/tests_mpy/test_main_py_microbit.py`. |
 
 Simulace i testy používají **stejný falešný hardware** – co ukazuje simulace, to ověřují testy. Na Linuxu a macOS: `./cpy.sh sim`, `./mpy.sh sim`, … Podrobnosti: [docs/Nastroje.md](docs/Nastroje.md#10-simulace-a-testy-na-pc-složka-pc).
 

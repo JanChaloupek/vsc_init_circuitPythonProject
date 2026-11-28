@@ -30,6 +30,9 @@ import threading
 import time as _time    # skutečný modul time (načítá se dřív než falešný)
 
 REZIM = "test"
+# Simulovana deska MicroPythonu ("picoed", "pico", "microbit"); nastavuje ji
+# _desky.nastav(). Pro CircuitPython (cpy sim, cpy test) zustava None.
+deska = None
 _start = _time.monotonic()
 _posluchaci = []
 _tlacitka = {}
@@ -121,6 +124,11 @@ def ticho():
 def registruj_tlacitko(klavesa: str, funkce) -> None:
     """Klávesa ("a", "b") -> funkce(stisknuto: bool), která tlačítko stiskne / pustí."""
     _tlacitka[klavesa] = funkce
+
+
+def zrus_tlacitka() -> None:
+    """Zapomene vsechna tlacitka (pri zmene simulovane desky)."""
+    _tlacitka.clear()
 
 
 def stiskni(klavesa: str, stisknuto: bool = True) -> bool:

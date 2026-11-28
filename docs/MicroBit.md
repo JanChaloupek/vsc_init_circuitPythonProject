@@ -13,6 +13,7 @@ Běžnou práci s MicroPythonem popisuje [MicroPython.md](MicroPython.md), vnit�
 - **Je na něm starší MicroPython** (1.15). Nezná **f-řetězce** `f"..."`, texty skládejte pomocí `+`.
 - **Zmenšení souborů pomáhá.** `mpy minify simple` odstraní komentáře a dokumentaci, soubory jsou o 30–45 % menší. `mpy minify full` přejmenuje i lokální proměnné, v našich knihovnách to ušetřilo dalších asi 15 %. `mpy minify max` sloučí program s jeho moduly do jednoho `main.py` a přejmenuje všechno. Je to poslední záchrana, protože chybové hlášky pak přestanou dávat smysl.
 - **Přenos občas selže** falešnou chybou `SyntaxError`. `mpy` to pozná, vypíše důvod a příkaz sám zopakuje.
+- **Bez desky** program vyzkouší `.\mpy sim --microbit` (s připojeným micro:bitem stačí `.\mpy sim`), viz [kapitola 8](#8-simulace-na-pc-mpy-sim---microbit).
 
 ---
 
@@ -194,7 +195,57 @@ Program studenta (`mpy runmain`) se neopakuje, protože tam může být `SyntaxE
 
 ---
 
-## 8. Jak se měřilo
+## 8. Simulace na PC (`mpy sim --microbit`)
+
+Program pro micro:bit jde vyzkoušet i bez desky. `.\mpy sim` simuluje micro:bit sám, když je micro:bit připojený; jinak ho vybere volba `.\mpy sim --microbit` (jiný soubor: `.\mpy sim muj.py --microbit`). Program běží beze změny – místo vestavěných modulů micro:bitu se použijí falešné ze složky `pc/_fake`:
+
+| Modul | Co umí |
+|---|---|
+| `microbit` (`pc/_fake/microbit.py`) | displej 5 × 5 s jasem 0–9 (`show`, `scroll`, `set_pixel`, `get_pixel`, `clear`), `Image` včetně vestavěných obrázků (`Image.HEART`, …), tlačítka `button_a` / `button_b`, piny `pin0`–`pin20` (`read_digital`, `write_digital`, `read_analog`, `write_analog`, `is_touched`), dotykové logo, `i2c`, `uart`, `spi`, akcelerometr, kompas, mikrofon, `sleep`, `running_time`, `temperature` |
+| `music` | `play` (i vestavěné melodie `music.NYAN`, …), `pitch`, `stop`, `set_tempo` |
+| `neopixel` | `NeoPixel(pin, počet)`, barvy se vypíšou při `show()` |
+| `radio` | `send` / `receive`; simulovaný micro:bit je sám, zprávy od jiného podstrčí jen test |
+| `machine` | jen to, co má micro:bit: `time_pulse_us` (ultrazvuk), `reset`, … |
+
+```text
+Spusteno main.py na desce: BBC micro:bit
+[     0.05 s] Displej: text "ZSaPR"
+[     4.55 s] Displej:
+               .....
+               .....
+               ..#..
+               .....
+               .....
+```
+
+Klávesy: `a` / `b` = tlačítko A / B, `l` = dotyk loga, `q` nebo `Ctrl+C` = konec.
+
+Simulace se chová jako deska i v tom, co micro:bit **nemá**: knihovny ze složek `lib/` a `lib_mpy/` nejsou k dispozici a `from machine import Pin` skončí chybou. Čekání (`sleep`) i rolování textu trvají přibližně jako na desce a `sleep(0.5)` nečeká vůbec – bere milisekundy, stejně jako na desce.
+
+Na co simulace nepřijde:
+
+- **f-řetězce**: program běží v Pythonu na PC, kde `f"..."` funguje. Na micro:bitu skončí chybou `SyntaxError` (viz kapitola 7).
+- **Málo místa a paměti**: na PC se vejde všechno.
+- **Tvary písmen**: `display.show("A")` a `display.scroll("Ahoj")` se vypíšou jako text, body displeje se nerozsvítí (`get_pixel` vrátí 0).
+- **Robot**: na I2C nic není. Program, který čte senzory nebo řídí motory robota (např. `i2c.read(0x38, 1)`), skončí chybou `OSError: [Errno 19] ENODEV` – stejně jako micro:bit bez robota.
+
+**Testy** (`.\mpy test`) běží na Pico:ed. Test pro micro:bit si desku vybere v `setUp`:
+
+```python
+from _fake._desky import nastav as nastav_desku
+
+class TestMujProgram(unittest.TestCase):
+    def setUp(self):
+        nastav_desku("microbit")
+        import microbit             # az po nastav_desku
+        self.microbit = microbit
+```
+
+Falešný `microbit` má pro testy pomocné funkce (na desce nejsou): `stiskni("a")`, `displej().svitici()` (co ukazuje displej), `displej().text`, `nastav_vstup(pin0, 1)`, `nastav_analog(pin1, 512)`, `nastav_pulz(pin2, 580)`, `dotkni(pin0)`, `historie(pin8)`, `pridej_i2c(0x38)` (zařízení na I2C), `nastav_naklon(x, y, z)`, `nastav_gesto("shake")`, `nastav_teplotu(25)` a další; `radio.prijmi("zprava")` a `radio.odeslane()`. Ukázka je v `pc/tests_mpy/test_main_py_microbit.py`.
+
+---
+
+## 9. Jak se měřilo
 
 - **Úložiště:** na desce se zapisoval zkušební soubor po 64 B, dokud nedošlo místo, pak se smazal. Měření se opakovalo, dokud dvě po sobě nedala stejnou hodnotu (kvůli pozdnímu uvolnění smazaného místa).
 - **RAM:** `gc.mem_free()` před importem a po něm, po měkkém restartu desky. Importovaly se jen moduly, které definují třídy; programy (za `if __name__ == "__main__":`) se nespouštěly.

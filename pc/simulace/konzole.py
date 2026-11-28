@@ -12,10 +12,12 @@ s casem od zacatku simulace:
 
 Klavesy (jen kdyz je vstup terminal):
     a / b  ... stisk tlacitka A / B (drzi se DRZENI_TLACITKA sekund)
+    l      ... dotyk loga (jen micro:bit)
     q      ... konec simulace (jako Ctrl+C)
 
 Co klavesa udela, urcuje simulovana deska (_rezim.registruj_tlacitko):
-falesny picoed (CircuitPython) i falesny machine pro Pico:ed (MicroPython).
+falesny picoed (CircuitPython), falesny machine pro Pico:ed a falesny
+microbit (MicroPython). Klavesa, kterou deska nezna, nic neudela.
 
 Vystup je zamerne jen ASCII: konzole Windows (cp1250) neumi vsechny znaky.
 """
@@ -31,7 +33,7 @@ _rezim = None
 _bezi = False
 _tty_obnov = None       # funkce, ktera vrati terminal do puvodniho stavu (Linux/macOS)
 
-_JMENA_TLACITEK = {"BUTTON_A": "A", "BUTTON_B": "B"}
+_JMENA_TLACITEK = {"BUTTON_A": "A", "BUTTON_B": "B", "LOGO": "logo"}
 
 
 # ---------------------------------------------------------
@@ -44,7 +46,7 @@ def _vypis(text):
 
 
 def _obraz(radky):
-    """Matice displeje 17 x 7: '#' sviti, '.' nesviti."""
+    """Matice displeje (17 x 7, micro:bit 5 x 5): '#' sviti, '.' nesviti."""
     return "\n".join("               " + "".join("#" if v else "." for v in radek) for radek in radky)
 
 
@@ -65,6 +67,7 @@ def _posluchac(co, kdo, hodnota):
             _vypis(f"Pin {kdo}: {int(bool(hodnota))}")
     elif co == "displej":
         if kdo == "scroll":
+            _posledni.pop(("displej", "obraz"), None)   # text obraz prepsal
             _vypis(f'Displej: text "{hodnota}"')
         else:
             _vypis("Displej:\n" + _obraz(hodnota))
@@ -76,7 +79,7 @@ def _posluchac(co, kdo, hodnota):
             else:
                 _vypis(f"Bzucak: ton {frekvence} Hz" + (f", {delka:g} ms" if delka else ""))
         elif kdo == "play":
-            _vypis(f"Bzucak: melodie {hodnota}" if isinstance(hodnota, str) and hodnota.startswith("Music.")
+            _vypis(f"Bzucak: melodie {hodnota}" if isinstance(hodnota, str) and hodnota.startswith(("Music.", "music.", "Sound."))
                    else f"Bzucak: melodie {hodnota!r}")
         else:
             _vypis("Bzucak: ticho")
@@ -88,6 +91,10 @@ def _posluchac(co, kdo, hodnota):
         _vypis(f"PWM {kdo}: {frekvence} Hz, strida {strida * 100 / 65535:.0f} %")
     elif co == "neopixel":
         _vypis("NeoPixel: " + " ".join("#%02x%02x%02x" % tuple(p[:3]) for p in hodnota))
+    elif co == "radio":
+        _vypis(f'Radio: odeslano "{hodnota}"' if isinstance(hodnota, str) else f"Radio: odeslano {hodnota!r}")
+    elif co == "uart":
+        _vypis(f"UART: {hodnota!r}")
 
 
 # ---------------------------------------------------------
@@ -104,10 +111,10 @@ def _stiskni(klavesa):
 
 def _klavesa(znak):
     znak = znak.lower()
-    if znak in ("a", "b"):
-        _stiskni(znak)
-    elif znak == "q":
+    if znak == "q":
         _thread.interrupt_main()        # v hlavnim vlakne vyvola KeyboardInterrupt
+    elif znak.isalpha():
+        _stiskni(znak)                  # a / b / l - co deska nezna, nic neudela
 
 
 def _cti_klavesy_windows():

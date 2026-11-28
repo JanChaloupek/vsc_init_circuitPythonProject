@@ -305,16 +305,24 @@ Nový modul (např. `motory.py` nebo `nastaveni.json`) stačí uložit do kořen
 
 ## 8. Běh na PC a nápověda v editoru
 
-Program jde vyzkoušet i bez desky. Moduly MicroPythonu (`machine`, `time`, `micropython`) mají ve složce **`pc/_fake`** falešné verze:
+Program jde vyzkoušet i bez desky. Moduly MicroPythonu (`machine`, `time`, `micropython`, na micro:bitu `microbit`, `music`, `neopixel`, `radio`) mají ve složce **`pc/_fake`** falešné verze:
 
 | Příkaz | Co dělá |
 |---|---|
-| **`.\mpy sim`** | spustí `main.py` (nebo jiný soubor: `.\mpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
+| **`.\mpy sim`** | spustí `main.py` (nebo jiný soubor: `.\mpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. Simulovaná deska: viz níže. |
 | **`.\mpy test`** | spustí unit testy z `pc/tests_mpy` (jen některé: `.\mpy test test_main`). Čas v testu sám neplyne – `time.sleep_ms(30)` ho jen posune – a test na konci kontroluje, co se s hardwarem dělo. |
 
 V panelu jsou to tlačítka **▶ Simulace main.py** a **✓ Testy main.py** (blok **Na PC bez desky**). Na Linuxu a macOS: `./mpy.sh sim`, `./mpy.sh test`.
 
-Falešný `machine` (`pc/_fake/machine.py`) simuluje desku **Pico:ed v2**: displej s čipem IS31FL3731 na I2C (adresa `0x74`), tlačítka A / B (GP20 / GP21), LED (GP25) a bzučák (GP3). Knihovna `lib_mpy/picoed_v2_lib` běží beze změny, takže `main.py` desku pozná stejně jako na robotovi. `.\mpy sim --pico` simuluje **Raspberry Pi Pico** (jen LED).
+Kterou desku simulace napodobí:
+
+| Deska | Kdy | Co se simuluje |
+|---|---|---|
+| **ELECFREAKS Pico:ed v2** | výchozí, `--picoed` | falešný `machine` (`pc/_fake/machine.py`): displej s čipem IS31FL3731 na I2C (adresa `0x74`), tlačítka A / B (GP20 / GP21), LED (GP25) a bzučák (GP3). Knihovna `lib_mpy/picoed_v2_lib` běží beze změny, takže `main.py` desku pozná stejně jako na robotovi. |
+| **Raspberry Pi Pico** | `--pico` | jen LED |
+| **BBC micro:bit v2** | je připojený micro:bit, `--microbit` | modul `microbit` (displej 5 × 5, tlačítka, piny, I2C, senzory), `music`, `neopixel`, `radio` – viz [MicroBit.md](MicroBit.md#8-simulace-na-pc-mpy-sim---microbit) |
+
+Bez volby se deska pozná podle připojené (nebo vybrané `mpy select`) desky – port se přitom neotevírá. Výpis na začátku simulace řekne, kterou desku simuluje a proč.
 
 ```text
 Spusteno main.py na desce: ELECFREAKS Pico:ed v2
@@ -327,7 +335,9 @@ Rolování textu trvá jako na desce – simuluje se i rychlost sběrnice I2C.
 
 Pro testy má falešný `machine` pomocné funkce (na desce nejsou): `machine.historie(25)` (co se zapsalo na pin LED), `machine.stiskni("a")` (tlačítko A), `machine.displej().svitici()` (co ukazuje displej), `machine.nastav_analog(pin, hodnota)` (ADC), `machine.nastav_pulz(pin, us)` (ultrazvuk), `machine.pridej_i2c(...)` (vlastní zařízení na I2C). Ukázka je v `pc/tests_mpy/test_main_py.py`.
 
-Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, SPI a NeoPixel.
+Testy běží na Pico:ed v2. Test pro micro:bit si desku vybere v `setUp` (`nastav_desku("microbit")`); před dalším testem se deska vrátí na Pico:ed. Ukázka: `pc/tests_mpy/test_main_py_microbit.py`.
+
+Nesimuluje se: `rp2` (PIO), `network`, na Picu UART, SPI a NeoPixel; na micro:bitu tvary písmen na displeji, `speech`, `power` a `log`.
 
 - Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
 

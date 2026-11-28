@@ -10,6 +10,8 @@ Pomocne funkce falesneho machine (na desce nejsou):
     machine.historie(25)        hodnoty zapsane na pin 25 (LED)
     machine.stiskni("a")        stiskne tlacitko A, stiskni("a", False) ho pusti
     machine.displej().svitici() co ukazuje displej ('#' sviti, '.' nesviti)
+
+Stejny program na BBC micro:bit testuje test_main_py_microbit.py.
 """
 
 import runpy
