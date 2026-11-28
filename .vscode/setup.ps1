@@ -29,8 +29,8 @@
 # musi umet nainstalovat i samotny Python.
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "3.5"
-$ScriptDate    = "2026-11-26"
+$ScriptVersion = "3.6"
+$ScriptDate    = "2026-11-28"
 
 # Python, ktery se nainstaluje, kdyz na pocitaci zadny neni.
 # Vyzkouseno s mpremote 1.27 a matplotlib 3.11 (rada 3.14).
@@ -326,9 +326,16 @@ if (-not $codeCmd) {
     $allExtensions = @()
 }
 foreach ($ext in $allExtensions) {
-    Write-Host "  -> Instaluji $($ext.Name) ... " -NoNewline
-    & $codeCmd @CodeExtArgs --install-extension $ext.Id --force | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    $radek = "  -> Instaluji $($ext.Name) ... "
+    Write-Host $radek -NoNewline
+    # Vystup prikazu "code" se zahodi cely (stdout i stderr). Kdyz cast sla na
+    # stderr, posunula kurzor a [OK] skoncilo uprostred radku
+    # ("automatick[OK]hravani"). Proto se radek po instalaci vypise znovu
+    # od zacatku (`r) - vysledek je pak vzdy na konci.
+    & $codeCmd @CodeExtArgs --install-extension $ext.Id --force >$null 2>&1
+    $ok = $LASTEXITCODE -eq 0
+    Write-Host "`r$radek" -NoNewline
+    if ($ok) {
         Write-Host "[OK]" @ColorDone
     } else {
         Write-Host "[CHYBA]" @ColorError
