@@ -1,0 +1,51 @@
+# ------------------------------------------------------------
+# upload.toml - co se nahrava na desku
+#
+# Plati pro cpy upload, cpy setup, Run on Save (Ctrl+S -> cpy save)
+# i pro mpy upload a mpy setup. Prehled bez desky: .\cpy files, .\mpy files
+#
+# Soubor se nahraje, kdyz je POVOLENY (sedi na nej maska z enable)
+# a neni ZAKAZANY (nesedi na nej zadna maska z disable).
+# Zakaz vyhrava vzdy, na poradi radku nezalezi.
+#
+# Pro desku plati sekce [all] + sekce platformy + sekce desky:
+#   CircuitPython            [all] + [circuitpython]
+#   MicroPython na Picu      [all] + [micropython] + [micropython.pico]
+#   MicroPython na micro:bitu [all] + [micropython] + [micropython.microbit]
+#
+# Masky:
+#   "main.py", "*.md"   jmeno souboru kdekoliv v projektu (maska bez lomitka)
+#   "/main.py", "/*"    od korene projektu - kazda maska s lomitkem
+#                       ("/*" = soubory v koreni, slozky ne)
+#   "lib/", "docs/"     slozka i se vsim uvnitr (slozka = maska s / na konci)
+#   * a ?               cokoliv / jeden znak v jedne casti cesty, ** = pres slozky
+#
+# Knihovny: lib/ (spolecne), lib_cpy/ (jen CircuitPython), lib_mpy/
+# (jen MicroPython). Na desce jsou vsechny v jedne slozce /lib.
+#
+# Vzdy se vynechaji (bez ohledu na tento soubor): skryte polozky (.git,
+# .vscode, .venv), __pycache__, *.pyc, boot_out.txt a predprelozene
+# knihovny .mpy pro jinou platformu.
+# ------------------------------------------------------------
+
+[all]
+# soubory v koreni projektu; podslozky (pc/, docs/, ...) se nenahravaji
+enable = ["/*"]
+# spoustece, dokumentace a nastaveni projektu - na desce k nicemu
+disable = ["*.md", "*.bat", "*.cmd", "*.sh", "*.ps1", "*.code-workspace", "pyrightconfig.json"]
+
+[circuitpython]
+enable = ["lib/", "lib_cpy/"]
+# program pro MicroPython - CircuitPython by ho spustil, kdyby chybel code.py
+disable = ["/main.py"]
+
+[micropython]
+# program a nastaveni pro CircuitPython
+disable = ["/code.py", "/settings.toml"]
+
+[micropython.pico]
+enable = ["lib/", "lib_mpy/"]
+
+[micropython.microbit]
+# micro:bit nema slozky - knihovny ze slozek se nenahravaji,
+# moduly pro micro:bit patri do korene projektu

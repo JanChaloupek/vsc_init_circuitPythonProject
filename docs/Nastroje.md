@@ -47,7 +47,7 @@ Soubor `deska.py` je rozdělený na oddíly (v kódu hledejte `ODDIL`):
 | 2 | výpis na obrazovku (barvy, hlášky, potvrzování) |
 | 3 | hledání desek: USB disky a sériové porty, uložený výběr desky (`select`) |
 | 4 | sériová konzole desky – REPL a raw REPL |
-| 5 | soubory projektu (`.ignoreCopy`), BOM, stromový výpis |
+| 5 | soubory projektu (pravidla `upload.toml`, složky knihoven), BOM, stromový výpis |
 | 6 | společné příkazy: `devices`, `vscode`, graf |
 | 7 | CircuitPython – příkazy `cpy`; na konci simulace a testy na PC pro obě platformy (`pc_hardware`, `pc_sim`, `pc_test`) |
 | 8 | MicroPython – příkazy `mpy` |
@@ -122,6 +122,19 @@ Z toho plyne:
 
 ---
 
+### Disk jen pro čtení: automatický restart
+
+Deska občas ohlásí disk `CIRCUITPY` jako chráněný proti zápisu (Windows: `Permission denied`, `Errno 13`; Linux a macOS: `Errno 30`). Ověřeno 28. 11. 2026: pomohl restart celé desky přes sériový port (`microcontroller.reset()`) – deska se znovu připojí a disk je zase zapisovatelný.
+
+`cpy save`, `cpy upload`, `cpy main` a `cpy setup` to proto zkusí samy (`cp_write` → `cp_auto_restart`): restartují desku, počkají, až se port a disk vrátí (podle UID, písmeno disku se může změnit), a zápis zopakují. Pojistky – jinak se restart nezkouší a vypíšou se rady (`CP_WRITE_TIPS`):
+
+- jen při chybě ochrany proti zápisu (`write_protected`); soubor otevřený jiným programem (`WinError 32`) to není,
+- jen jednou za příkaz a ne znovu do 3 minut (`AUTO_RESTART_PAUSE`, čas posledního pokusu podle UID desky v `auto_restart.json` vedle `hw_desek.json`) – Run on Save běží při každém `Ctrl+S`,
+- ne když disk zamyká `boot.py` se `storage.remount` (restart by nepomohl),
+- ne když je sériový port obsazený (Serial Monitor, REPL, `--watch`, `--stop`).
+
+Když restart nepomůže, rady začnou „automatický restart desky nepomohl“ a pokračují odpojením napájení.
+
 ## 4. Sériová konzole: REPL a raw REPL
 
 Některé věci přes disk udělat nejdou – zastavit program, otevřít konzoli, spustit kód bez zápisu na disk. K tomu slouží sériová linka. MicroPython i CircuitPython jí rozumějí stejně:
@@ -157,7 +170,7 @@ MicroPython deska nemá USB disk, takže `mpy` všechno dělá přes nástroj **
 
 | `mpy` | co zavolá |
 |---|---|
-| `mpy upload`, `mpy main` | `mpremote connect COM4 cp main.py : + cp -r lib :` – víc příkazů spojených `+` v jednom spojení |
+| `mpy upload`, `mpy main` | `mpremote connect COM4 cp -r lib : + cp main.py :main.py` – z dočasné složky (`mp_stage`), víc příkazů spojených `+` v jednom spojení |
 | `mpy runmain` | `mpremote connect COM4 run main.py` |
 | `mpy repl` | `mpremote connect COM4 repl` – `Ctrl+C` je v konzoli obyčejná klávesa (`ctrl_c_as_key`), ne signál. Jinak by ho dostal i `cmd.exe`, ve kterém běží `mpy.cmd`, a po konci konzole by se ptal *Terminate batch job (Y/N)?* |
 | `mpy list`, `mpy wipe`, `mpy check` | `mpremote connect COM4 exec "<krátký program>"` – program na desce projde soubory a vypíše je jako JSON |
@@ -172,7 +185,7 @@ MicroPython deska nemá USB disk, takže `mpy` všechno dělá přes nástroj **
 Soubory se kopírují s cílovým jménem (`cp main.py :main.py`, ne jen `cp main.py :`). BBC micro:bit by je jinak uložil pod **prázdné jméno**.
 
 **BBC micro:bit** (USB `0D28:0204`, tabulka `MP_FLAT_USB`) má ploché úložiště: bez složek, bez `os.mkdir`, bez modulu `json`, a `os.listdir()` u něj nebere cestu. Proto:
-- `mpy upload` místo `cp -r lib :` kopíruje soubory ze složky po jednom do kořene a podsložky přeskočí (`mp_cp_plan`).
+- Na desku jdou jen soubory z kořene projektu, knihovny ze složek ne (sekce `[micropython.microbit]` v `upload.toml`, viz kapitola 6).
 - `mpy list`, `wipe` a `check` posílají na desku kód, který vypíše seznam souborů jako zápis Pythonu (`repr`), ne jako JSON. Na PC ho načte `ast.literal_eval`.
 - Ostatní příkazy (`reset`, `repl`, `runmain`) fungují stejně jako u Pica.
 - `mpremote` po každém příkazu raw REPL opouští (`Ctrl+B`), ale micro:bit tento poslední znak často nedostane: port se zavře dřív, než ho převodník na desce předá (naměřeno asi 4 z 6 pokusů). Konzole by pak místo `>>>` ukázala `OK>` a nereagovala. Proto `mpy repl` před spuštěním `mpremote repl` pošle `Ctrl+B` sám a chvíli počká (`mp_leave_raw_repl`).
@@ -184,17 +197,42 @@ Proč to tak je a naměřená čísla: [MicroBit.md](MicroBit.md).
 
 ---
 
-## 6. Co se nahrává: `.ignoreCopy` a `upload_config.txt`
+## 6. Co se nahrává: `.vscode/upload.toml`
 
-Obě platformy mají vlastní soubor, protože se nahrávají jinak:
+Jeden soubor pravidel pro obě platformy. Používají ho `Ctrl+S` (Run on Save → `cpy save`), `cpy upload`, `cpy setup`, `mpy upload`, `mpy setup`, přehled `cpy files` / `mpy files` i simulace na PC (které složky s knihovnami jsou v cestě pro import).
 
-| | CircuitPython | MicroPython |
+**Pravidlo:** soubor se nahraje, když je **povolený** (sedí na něj maska z `enable`) a není **zakázaný** (nesedí na něj žádná maska z `disable`). Zákaz vyhrává vždy, na pořadí řádků nezáleží. Pro desku platí sekce `[all]` + sekce platformy + sekce desky:
+
+| Deska | Sekce | Pozná se podle |
 |---|---|---|
-| soubor | `.vscode/.ignoreCopy` | `.vscode/upload_config.txt` |
-| princip | co se **ne**nahrává (výjimky) | co se nahrává (seznam) |
-| použije | `Ctrl+S` (Run on Save), `cpy upload`, `cpy setup` | `mpy upload`, `mpy setup` |
+| CircuitPython | `[all]` + `[circuitpython]` | nástroj `cpy` |
+| MicroPython na Picu / Pico:edu | `[all]` + `[micropython]` + `[micropython.pico]` | USB VID `2E8A` (`mp_profile`) |
+| BBC micro:bit | `[all]` + `[micropython]` + `[micropython.microbit]` | USB `0D28:0204` |
+| jiná deska s MicroPythonem | `[all]` + `[micropython]` | |
 
-V `.ignoreCopy` je jedna maska na řádek: `*` znamená „cokoliv“ i přes více složek, `**` totéž. Řádky začínající `#` jsou komentáře. Skryté položky (`.git`, `.vscode`), `__pycache__`, `*.pyc` a `boot_out.txt` se nekopírují nikdy. Soubor sám obsahuje vysvětlení ke každé masce.
+Výchozí obsah šablony: `[all]` povoluje soubory v kořeni projektu (`"/*"`) a zakazuje dokumentaci a spouštěče; `[circuitpython]` povoluje `lib/` a `lib_cpy/` a zakazuje `/main.py`; `[micropython]` zakazuje `/code.py` a `/settings.toml`; `[micropython.pico]` povoluje `lib/` a `lib_mpy/`; `[micropython.microbit]` nic nepovoluje navíc. Podsložky kořene (`pc/`, `docs/`, …) tedy nejdou nikam, protože je nic nepovoluje.
+
+**Masky:**
+
+| Maska | Sedí na |
+|---|---|
+| `"main.py"`, `"*.md"` | jméno souboru kdekoliv v projektu (maska bez lomítka) |
+| `"/main.py"`, `"lib/x.py"` | cestu od kořene projektu – každá maska s lomítkem |
+| `"/*"` | soubory v kořeni (složky ne – `*` nepřechází přes `/`) |
+| `"lib/"`, `"docs/"` | složku i se vším uvnitř (složka = maska s `/` na konci) |
+| `"lib/**/*.mpy"` | `**` = přes libovolný počet složek; `?` = jeden znak |
+
+Velikost písmen se nerozlišuje. Stejné masky používá i `minify exclude` (funkce `mask_match`).
+
+**Knihovny:** `lib/` (společné), `lib_cpy/` (jen CircuitPython) a `lib_mpy/` (jen MicroPython) jdou na desce všechny do jedné složky `/lib` (`board_path`, tabulka `LIB_DIRS`). Dva soubory se stejnou cestou na desce (`lib/robot.py` a `lib_mpy/robot.py`) nahrávání odmítne (`board_layout`). Simulace na PC dá do cesty pro import stejné složky, jaké jdou na desku (`profile_lib_dirs`), takže `cpy sim` nenajde knihovnu z `lib_mpy/` stejně jako deska.
+
+**Pevné pojistky v kódu** (pravidla je nepřebijí): skryté položky (`.git`, `.vscode`, `.venv`), `__pycache__`, `*.pyc`, `boot_out.txt` a předpřeložené knihovny `.mpy` pro jinou platformu – pozná se podle prvního bajtu souboru (`mpy_platform`: CircuitPython `C`, MicroPython `M`); na micro:bit nejde žádná `.mpy`, neumí je.
+
+**micro:bit nemá složky:** pravidla na něj ze složek nic nepovolují. Kdyby je někdo povolil, nahrávání skončí chybou s radou (`board_layout`) – soubory se do kořene desky nepřesouvají.
+
+**MicroPython bez `__pycache__` na desce:** `mpy upload` vždy připraví do dočasné složky přesně to, co má být na desce (`mp_stage`: cesty na desce, `.py` bez BOM, případně zmenšené) a `mpremote` nahrává jen z ní. Dřívější `cp -r lib :` přímo z projektu posílal na desku i `__pycache__/*.pyc`.
+
+Soubor se čte modulem `tomllib` (Python 3.11+), na starším Pythonu knihovnou `tomli` – setup ji doinstaluje jen tam (`tomli; python_version < '3.11'`). Chyby v souboru (zápis TOML, neznámá sekce nebo klíč, hodnota, která není seznam masek) hlásí `load_upload_rules` srozumitelně. Dřívější `.ignoreCopy` a `upload_config.txt` se už nepoužívají; když v projektu zůstanou, `deska.py` jednou upozorní.
 
 Run on Save reaguje na soubory `.py`, `.toml`, `.json`, `.txt` a `.csv` (nastavení `RUN_ON_SAVE_MATCH`). Binární soubory (`.mpy`, `.bmp`, `.wav`) se v editoru neukládají, takže je Run on Save nezachytí – na ně je `cpy upload`.
 
@@ -209,7 +247,7 @@ NameError: name '\ufeff' is not defined
 ```
 
 - `cpy` značku při kopírování z `.py` souborů odstraní sám a upozorní na to.
-- `mpy upload` kopíruje přes `mpremote` beze změny, proto na soubory s BOM jen upozorní. `mpy runmain` pošle vyčištěnou kopii.
+- `mpy upload` nahrává z dočasné kopie (`mp_stage`), ze které je BOM odstraněný, a na soubory s BOM upozorní. `mpy runmain` pošle vyčištěnou kopii.
 - Natrvalo: ve VS Code klikněte vpravo dole ve stavovém řádku na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8`.
 
 ---
@@ -255,13 +293,13 @@ Jeden přepínač se stavy `off`, `simple`, `full` a (jen pro `mpy`) `max`, zvl�
 ```
 
 - Zmenšuje knihovna `python-minifier` (povinná, instaluje ji setup) s volbami z `MINIFY_LEVELS`: `simple` odstraní komentáře, dokumentační řetězce a mezery; `full` navíc přejmenuje lokální proměnné a vytáhne opakované konstanty. Globální jména (třídy, funkce) se nepřejmenují nikdy, protože je importují jiné soubory. Jména z `minify_keep` (`minify keep` / `unkeep`) zůstanou vždy.
-- `main.py`, `code.py` a `boot.py` se nezmenšují (`NO_MINIFY`) – čísla řádků v chybách programu studenta musí sedět. Další soubory vyřadí `minify exclude <vzory>` (`minify_exclude`, funkce `minify_excluded`; vzory jako v `.ignoreCopy`).
-- **`max`** (`mp_merge_program`): přes modul `ast` projde `main.py` a místní moduly, které importuje (`from modul import ...`, soubory v kořeni a v `lib/`), a sloučí je v pořadí podle závislostí. Importy cizích modulů dá nahoru (bez duplicit), `from m import a as b` nahradí přiřazením `b = a` a vynechá bloky `if __name__ == "__main__":` importovaných modulů. Odmítne `import modul`, `import *`, vnořené a relativní importy, kruhy a kolize jmen. Výsledek zmenší s `rename_globals=True`. Jednotlivé soubory se při `max` zmenšují jako `full`.
+- `main.py`, `code.py` a `boot.py` se nezmenšují (`NO_MINIFY`) – čísla řádků v chybách programu studenta musí sedět. Další soubory vyřadí `minify exclude <vzory>` (`minify_exclude`, funkce `minify_excluded`; masky jako v `upload.toml`).
+- **`max`** (`mp_merge_program`): přes modul `ast` projde `main.py` a místní moduly, které importuje (`from modul import ...`, soubory, které jdou na desku do kořene nebo do `/lib`), a sloučí je v pořadí podle závislostí. Importy cizích modulů dá nahoru (bez duplicit), `from m import a as b` nahradí přiřazením `b = a` a vynechá bloky `if __name__ == "__main__":` importovaných modulů. Odmítne `import modul`, `import *`, vnořené a relativní importy, kruhy a kolize jmen. Výsledek zmenší s `rename_globals=True`. Jednotlivé soubory se při `max` zmenšují jako `full`.
 - Nahrávání vždy vypíše nastavení (`minify_report`): vypnuto = jeden řádek, zapnuto = úroveň a seznam, co se zmenší a co ne (a proč).
 - Chyba v syntaxi souboru, který se slučuje (`max`), nahrávání zastaví s názvem souboru, řádkem a důvodem (`py_syntax_text`) – sloučit se nedá. Bez `max` se soubor s chybou nahraje a chybu ukáže deska.
 - **Neukončený konflikt z gitu** (řádky `<<<<<<<` / `>>>>>>>` v `.py` souboru, zůstanou po nedokončeném merge nebo pull) zastaví `upload` i `main` u `mpy` i `cpy` už v kroku 1 (`git_conflict_step`). Takový soubor na desce stejně spadne. Výpis řekne soubor, řádek a jak konflikt ve VS Code vyřešit.
 - **CircuitPython:** zmenšení je ve funkci `board_bytes()` – tu používá porovnání s deskou (`same_content`) i zápis (`copy_file`), takže `cpy upload` i `cpy save` (Run on Save) porovnávají zmenšený obsah a nezměněné soubory dál přeskočí.
-- **MicroPython:** `mp_stage()` připraví do dočasné složky kopii nahrávaných položek se zmenšenými `.py` soubory a `mpremote` nahrává z ní. Jeho porovnání (`Up to date`) tak funguje stejně.
+- **MicroPython:** `mp_stage()` připraví do dočasné složky kopii nahrávaných souborů se zmenšenými `.py` soubory a `mpremote` nahrává z ní. Jeho porovnání (`Up to date`) tak funguje stejně.
 - Soubor, který zmenšit nejde (např. chyba v syntaxi), se nahraje beze změny a `deska.py` na to jednou upozorní.
 
 ### Nápověda Pylance: `pyrightconfig.json`
@@ -296,7 +334,7 @@ Hotové kroky lze sdílet: `cp_step_drive()` (disk CIRCUITPY), `cp_step_port()` 
 
 ## 10. Simulace a testy na PC (složka `pc/`)
 
-Všechno, co běží jen na počítači, je ve složce **`pc/`** (na desku se nenahrává – v `.ignoreCopy` je `pc/**`):
+Všechno, co běží jen na počítači, je ve složce **`pc/`** (na desku se nenahrává – pravidla v `upload.toml` podsložky kořene nepovolují):
 
 | Složka | Co obsahuje |
 |---|---|
@@ -332,7 +370,7 @@ Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes 
 - CircuitPython (`cpy`): moduly se registrují v pořadí `adafruit_ticks`, `time`, `board`, `digitalio`, `analogio`, `busio`, `pwmio`, `neopixel`, `picoed` (falešný `time` potřebuje `adafruit_ticks`, `picoed` potřebuje `board`, `digitalio` a `busio`).
 - MicroPython (`mpy`): `adafruit_ticks`, `utime`, `micropython`, `machine`; `utime` je zároveň `time`. Moduly standardní knihovny s „u“ (`uasyncio`, `ujson`, `ustruct`, …) jsou skutečné moduly Pythonu (`asyncio`, `json`, …).
 - Vždy se načte jen jedna sada – `time` má v MicroPythonu jiné funkce (`sleep_ms`, `ticks_ms`) než v CircuitPythonu. Proto má každá platforma svou složku testů.
-- Do cesty pro import se přidá kořen projektu (program studenta a jeho moduly), `lib/` (jako `/lib` na desce) a `pc/` (`_fake`, `tests`, `simulace`).
+- Do cesty pro import se přidá kořen projektu (program studenta a jeho moduly), složky s knihovnami, které jdou na tuto desku (`lib/` + `lib_cpy/` pro `cpy`, `lib/` + `lib_mpy/` pro `mpy`; jako `/lib` na desce) a `pc/` (`_fake`, `tests`, `simulace`).
 - Testy tak mohou psát `import picoed`, `import _fake.adafruit_ticks as fake_ticks` i `from tests.create import ...` – stejně jako v projektu `3-SW_GIT`, jehož testy projdou přes `cpy test` beze změny (místo jeho `run_test.py`).
 
 ### MicroPython: falešný `machine`
@@ -341,7 +379,7 @@ Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes 
 - **Pin**: stav pinu je společný pro všechny objekty `Pin(25)` (jako na desce). Změna výstupu se oznámí (`pin`), změna vstupu zavolá obsluhu `irq()` podle `IRQ_RISING` / `IRQ_FALLING`.
 - **Timer**: v testu ho spustí posun času – `adafruit_ticks.advance_ticks()` (tedy i `time.sleep_ms`) zavolá `_rezim.casovace(cil_ms)` a ten spustí časovače, které mezitím vyprší, po pořadí. V simulaci čeká na nejbližší časovač vlákno. Tak funguje i odrušení zákmitů v `picoed_v2_lib.Button` (přerušení + jednorázový Timer 20 ms).
 - **Displej**: model čipu si pamatuje 8 snímků a ukazuje ten z konfiguračního registru; `obraz()` vrátí 7 × 17 hodnot jasu. Přenos po I2C trvá jako na desce (9 bitů na bajt při `freq`), proto rolování textu trvá stejně dlouho.
-- **Knihovna** `lib/picoed_v2_lib` se nemění. `pc/_fake/_mp_knihovny.py` jen obalí `Display.scroll` / `clear` a `Music.play` / `pitch`: oznámí výsledek (text, melodii) a dílčí zápisy uvnitř ztiší (`_rezim.ticho()`), jinak by konzole vypsala každý krok rolování.
+- **Knihovna** `lib_mpy/picoed_v2_lib` se nemění. `pc/_fake/_mp_knihovny.py` jen obalí `Display.scroll` / `clear` a `Music.play` / `pitch`: oznámí výsledek (text, melodii) a dílčí zápisy uvnitř ztiší (`_rezim.ticho()`), jinak by konzole vypsala každý krok rolování.
 - **Klávesy** `a` / `b`: deska zaregistruje, co stisk udělá (`_rezim.registruj_tlacitko`) – falešný `picoed` i falešný `machine`. Konzole volá jen `_rezim.stiskni()`.
 - **Reset**: před každým testem `_rezim.resetuj()` vrátí desku do výchozího stavu (piny, časovače, displej).
 
@@ -353,13 +391,30 @@ Proto platí: **co ukazuje simulace, to ověřují testy** – obojí jde přes 
 
 ---
 
-## 11. Na čem bylo ověřeno
+## 11. Testy nástroje `deska.py` (pro správce šablony)
+
+Testy všech příkazů CLI jsou v **`.vscode/tests/test_deska.py`** – ve složce `.vscode/`, kam studenti nechodí a co se nikdy nenahrává na desku. Spouští se z kořene projektu:
+
+```powershell
+.venv\Scripts\python .vscode\tests\test_deska.py                    # bez desky
+.venv\Scripts\python .vscode\tests\test_deska.py --hw               # + jedna deska z kazde platformy
+.venv\Scripts\python .vscode\tests\test_deska.py --hw --all-boards  # + vsechny pripojene desky
+.venv\Scripts\python .vscode\tests\test_deska.py --hw --only microbit
+```
+
+- Test si v dočasné složce vytvoří zkušební projekt: `deska.py` a `upload.toml` z šablony a vygenerované programy a knihovny ve všech složkách (`lib/`, `lib_cpy/`, `lib_mpy/` i balíček). Programy jen vypisují značky přes `print()` – nepotřebují žádný hardware kromě samotné desky.
+- **Bez desky:** nápověda, chybné příkazy a volby, `devices`, `files` pro všechny desky (přesný seznam souborů a cest na desce), chyby v `upload.toml`, kolize jmen, `minify`, `select`, `vscode`, `sim`, `test` a zápis na falešný disk CIRCUITPY (složka na PC): `upload`, `save`, `main`, `wipe`, `setup`, konflikt z gitu.
+- **`--hw`:** na každé testované desce se **nejdřív zazálohuje celý obsah**, pak se projdou příkazy včetně zápisu, `wipe` a `setup`, a nakonec se obsah vrátí a ověří porovnáním obsahu souborů. `reset --hard` běží až po obnově – deska se při něm odpojí z USB a kdyby ji Windows znovu nerozpoznal, má aspoň svůj obsah.
+- **Zamčený disk (jen CircuitPython):** test disk zamkne souborem `boot.py` se `storage.remount`. Jednou tak, že zámek po restartu pomine (`boot.py` se hned sám smaže) – automatický restart v `cpy save` i `cpy upload` musí zápis dokončit. Podruhé natrvalo – restart nepomůže, rady musí vést k odpojení napájení a druhý pokus do 3 minut restart neopakuje. Nakonec `boot.py` smaže přes REPL a desku restartuje.
+- **Netestuje se** záměrně: `cpy bootloader` a `cpy flash` (mění firmware), `cpy wipe --format`, `cpy open` (otevře okno) a `cpy lib` (potřebuje circup a internet; ověří se jen hláška, když circup chybí).
+
+## 12. Na čem bylo ověřeno
 
 | Co | Verze |
 |---|---|
 | CircuitPython | 9.2.7 na ELECFREAKS Pico:ed (RP2040), disk `CIRCUITPY` |
 | MicroPython | 1.27.0 na Raspberry Pi Pico (RP2040) |
-| Systém | Windows 11 (PowerShell, cmd, Git Bash); Ubuntu 24.04 v Dockeru (`setup.sh`, simulace a testy na PC včetně čtení kláves) |
+| Systém | Windows 11 (PowerShell, cmd, Git Bash); Ubuntu 24.04 v Dockeru (`setup.sh`, simulace a testy na PC včetně čtení kláves); Python 3.9 a 3.10 v Dockeru (`tomli`, `files`, `minify`, testy na PC) |
 | Knihovny | mpremote 1.27.0, pyserial 3.5, matplotlib 3.11 |
 
 Práce se skutečnou deskou na Linuxu a macOS je napsaná (disky se hledají v `/media/$USER`, `/run/media/$USER`, `/Volumes`), ale na počítači s těmito systémy a připojenou deskou zatím odzkoušená nebyla. macOS nebyl zkoušený vůbec.

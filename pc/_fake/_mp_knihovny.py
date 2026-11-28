@@ -1,7 +1,7 @@
 # _fake/_mp_knihovny.py
 
 """
-Oznamování pro knihovnu lib/picoed_v2_lib (mpy sim, mpy test).
+Oznamování pro knihovnu lib_mpy/picoed_v2_lib (mpy sim, mpy test).
 
 Knihovna běží na PC beze změny nad falešným modulem machine. Hardware ale
 vidí jen nízkoúrovňové zápisy: rolování textu jsou stovky zápisů do čipu
@@ -77,7 +77,7 @@ def _obal_hudbu(Music):
 
 
 def obal():
-    """Obali tridy knihovny picoed_v2_lib (kdyz v lib/ je). Volat jednou."""
+    """Obali tridy knihovny picoed_v2_lib (kdyz v lib_mpy/ je). Volat jednou."""
     try:
         from picoed_v2_lib import display, music
     except ImportError:

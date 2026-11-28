@@ -154,7 +154,9 @@
         "misync",
         "LOCALAPPDATA",
         "Dockeru",
-        "necommitujte"
+        "necommitujte",
+        "tomli",
+        "tomllib"
     ],
     "cSpell.ignorePaths": [
         "**/*.pyi"

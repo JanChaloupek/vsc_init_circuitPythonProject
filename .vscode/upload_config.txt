@@ -1,3 +1,0 @@
-# Seznam souboru a adresaru k uploadu na MicroPython zarizeni
-main.py
-lib

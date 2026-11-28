@@ -33,7 +33,7 @@
 # umet zkontrolovat i samotny Python.
 # ------------------------------------------------------------
 SCRIPT_NAME="setup.sh"
-SCRIPT_VERSION="3.5"
+SCRIPT_VERSION="3.6"
 SCRIPT_DATE="2026-11-26"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -207,14 +207,15 @@ echo "--------------------------------------"
 # ------------------------------------------------------------
 # 3) Python knihovny do .venv
 # ------------------------------------------------------------
-echo "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier)..."
+echo "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier, tomli)..."
 # Povinne: mpremote (MicroPython) a python-minifier (zmenseni souboru pri
-# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md)
-if "$VENV_PY" -c "import mpremote, serial, python_minifier" &>/dev/null; then
+# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md); tomli jen na
+# Pythonu starsim nez 3.11 (cteni .vscode/upload.toml, novejsi Python ma tomllib)
+if "$VENV_PY" -c "import sys, mpremote, serial, python_minifier; sys.version_info >= (3, 11) or __import__('tomli')" &>/dev/null; then
     echo "mpremote a python-minifier OK"
 else
     echo "mpremote / python-minifier nenalezen. Instaluji pres pip..."
-    if ! "$VENV_PY" -m pip install --disable-pip-version-check mpremote python-minifier; then
+    if ! "$VENV_PY" -m pip install --disable-pip-version-check mpremote python-minifier "tomli; python_version < '3.11'"; then
         echo "ERROR: Instalace mpremote / python-minifier selhala."
         exit 1
     fi

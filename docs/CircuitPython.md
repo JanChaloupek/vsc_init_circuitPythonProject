@@ -90,14 +90,14 @@ Vývoj v CircuitPythonu je navržen tak, aby student nemusel nic nahrávat ručn
    - **Linux:** `/media/$USER/CIRCUITPY`, `/run/media/...` nebo `/mnt/CIRCUITPY`.
 5. Soubor se zkopíruje na desku (jen když se liší od toho, co na desce už je) a **CircuitPython sám spustí nový kód** – tomu se říká *autoreload*.
 
-Run on Save sleduje soubory `.py`, `.toml`, `.json`, `.txt` a `.csv`. Jestli se soubor opravdu zkopíruje, rozhodne `.vscode/.ignoreCopy` (viz B).
+Run on Save sleduje soubory `.py`, `.toml`, `.json`, `.txt` a `.csv`. Jestli se soubor opravdu zkopíruje, rozhodnou pravidla v `.vscode/upload.toml` (viz B).
 
 **Kde zjistit, co se stalo:** panel *Output* (`Ctrl+Shift+U`) → v rozbalovacím seznamu vpravo vyberte *Run On Save*. Výpis jde po očíslovaných krocích, takže je vidět, kde se kopírování zastavilo:
 
 ```text
 Run on Save: kopirovani ulozeneho souboru na desku CIRCUITPY (09:22:58)
 1) Ulozeny soubor          - jaký soubor, jeho velikost a čas uložení
-2) Pravidla                - jestli ho .ignoreCopy nevylučuje (a kterou maskou)
+2) Pravidla                - jestli ho upload.toml povoluje (a kterou maskou)
 3) Disk desky CIRCUITPY    - kde je disk, volné místo, verze firmwaru
 4) Cil na desce            - co tam teď je a jestli se obsah liší
 5) Kopirovani              - výsledek zápisu
@@ -109,21 +109,21 @@ Když se něco nepovede, výpis skončí řádkem `ERROR: v kroku N - …` s rad
 > [!TIP]
 > Když uložíte několik souborů rychle za sebou, CircuitPython počká, až zápisy ustanou (asi 0,5 s), a program restartuje **jen jednou**.
 
-### B) Co se na desku kopíruje (`.vscode/.ignoreCopy`)
-Na desku patří jen to, co program potřebuje ke svému běhu. Soubor **`.vscode/.ignoreCopy`** obsahuje masky toho, co se **nekopíruje** – každý řádek jedna maska. Hlavní položky:
+### B) Co se na desku kopíruje (`.vscode/upload.toml`)
+Na desku patří jen to, co program potřebuje ke svému běhu. Na CircuitPython desku jde:
 
-| Maska | Proč se nekopíruje |
+| Co | Kam na desce |
 |---|---|
-| `main.py` | program pro MicroPython – CircuitPython by ho spustil, kdyby chyběl `code.py` |
-| `pc/*` | všechno, co běží jen na PC: falešný hardware, nápověda pro editor, testy, simulace |
-| `lib/picoed_v2_lib/*` | knihovna pro MicroPython (CircuitPython má modul `picoed` vestavěný) |
-| `tests/*`, `run_test.py` | testy, které běží na PC |
-| `*.md`, `*.bat`, `*.cmd`, `*.sh`, `*.ps1` | dokumentace a spouštěcí skripty |
+| soubory v kořeni projektu (`code.py`, vaše moduly, `settings.toml`, data `.txt` / `.csv`) | do kořene |
+| knihovny ze složek **`lib/`** (společné) a **`lib_cpy/`** (jen CircuitPython) | obě do jedné složky `/lib` |
 
-- `*` znamená „cokoliv“ (i přes více složek), `**` znamená totéž.
-- Skryté položky (`.git`, `.vscode`, ...) a `__pycache__` se nekopírují nikdy.
+Nenahrává se: `main.py` (program pro MicroPython – CircuitPython by ho spustil, kdyby chyběl `code.py`), složka `lib_mpy/` (knihovny pro MicroPython), ostatní podsložky (`pc/`, `docs/`, …), dokumentace a spouštěče (`*.md`, `*.cmd`, `*.sh`, …). Nikdy se nenahrají skryté položky (`.git`, `.vscode`), `__pycache__` a předpřeložené knihovny `.mpy` pro MicroPython.
+
+- Pravidla jsou v souboru **`.vscode/upload.toml`**: soubor se nahraje, když je **povolený** (`enable`) a není **zakázaný** (`disable`).
+- **Co a proč se nahraje, ukáže bez desky:** `.\cpy files`.
 - Stejná pravidla platí pro `Ctrl+S` i pro příkaz `cpy upload`.
-- Řádky začínající `#` jsou komentáře – soubor sám vysvětluje, proč tam která maska je.
+- Dva soubory se stejným jménem v `lib/` a `lib_cpy/` nahrávání odmítne – na desce by jeden přepsal druhý.
+- Podrobný popis pravidel: [Nastroje.md](Nastroje.md#6-co-se-nahrává-vscodeuploadtoml).
 - Chcete-li na desku nenahrávat další soubor (např. `poznamky.txt`), přidejte jeho jméno na nový řádek.
 
 ### C) Tlačítka v panelu a ve stavovém řádku
@@ -175,7 +175,7 @@ cpy help
 
 # 1. Nahrání projektu (jen změněné soubory; --all = všechny)
 #    Soubory se zapisují přímo na disk jako při Ctrl+S, nový kód spustí autoreload.
-#    Co se nahrává, určuje .vscode/.ignoreCopy. Sériový port se nepoužívá.
+#    Co se nahrává, určuje .vscode/upload.toml (přehled: cpy files). Sériový port se nepoužívá.
 #    --watch = po nahrání poslouchá sériový port a ukáže první výstup programu (nebo chybu).
 cpy upload
 
@@ -218,6 +218,9 @@ cpy select
 # 13. Zmenšení .py souborů při zápisu na desku (off / simple / full) - obvykle není potřeba
 #     (cpy minify exclude robot.py = tento soubor nezmenšovat)
 cpy minify
+
+# 14. Co se z projektu nahraje na desku a proč se co vynechá (bez desky)
+cpy files
 ```
 
 ### B) Příkazy jen pro CircuitPython
@@ -278,7 +281,7 @@ Desky Pico:ed mají základní funkce v modulu `picoed`. Pokud potřebujete při
   cpy lib list                         # které knihovny mají novější verzi
   cpy lib update                       # aktualizuje je
   ```
-- **Ručně:** stáhněte oficiální Adafruit CircuitPython Bundle z [circuitpython.org/libraries](https://circuitpython.org/libraries) a zkopírujte příslušné soubory `.mpy` nebo `.py` do složky **`lib/`** na disku `CIRCUITPY`.
+- **Ručně:** stáhněte oficiální Adafruit CircuitPython Bundle z [circuitpython.org/libraries](https://circuitpython.org/libraries) a zkopírujte příslušné soubory `.mpy` nebo `.py` do složky **`lib_cpy/`** v projektu (`cpy upload` je nahraje do `/lib` na desce), nebo přímo do složky `lib/` na disku `CIRCUITPY`.
 
 ---
 
@@ -312,6 +315,7 @@ Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu zajišť
 | Problém | Příčina | Řešení |
 |---|---|---|
 | **Disk CIRCUITPY se po zapojení neobjeví** | 1. Použit pouze nabíjecí kabel bez datových linek.<br>2. Na desce je nahrán MicroPython místo CircuitPythonu. | 1. Použijte kvalitní datový kabel.<br>2. Přepněte desku Pico:ed do režimu BOOTSEL a nahrajte firmware CircuitPythonu (`.uf2` pro Pico:ed). |
+| **Zápis skončí chybou `Permission denied` (`Errno 13`), disk je jen pro čtení** | Deska ohlásila disk jako chráněný proti zápisu (občas po náhlém odpojení nebo přepětí), nebo ho zamyká `boot.py` se `storage.remount(...)`. | `Ctrl+S` a `cpy upload` nejdřív samy zkusí jednou restartovat desku (výpis `restart:`). Když to nejde nebo nepomůže:<br>1. `.\cpy reset --hard` – restart celé desky, disk se znovu připojí a bývá zase zapisovatelný (zavřete předtím Serial Monitor).<br>2. Nepomůže-li: odpojte USB kabel, vypněte a zapněte napájení robota a kabel zapojte zpět.<br>3. Zkontrolujte `boot.py`. |
 | **Deska bliká červeně / žlutě (Safe Mode)** | Kritická chyba hardware nebo odpojení USB kabelu během zápisu. | Otevřete soubor `boot_out.txt` na disku `CIRCUITPY`, kde je zapsán důvod pádu. Opravte chybu v `code.py` a stiskněte tlačítko RESET. |
 | **Kód se neustále restartuje ve smyčce** | Ve VS Code je zapnuté automatické ukládání s příliš krátkým intervalem. | Vypněte v nastavení VS Code volbu `files.autoSave` a ukládejte kód manuálně klávesami `Ctrl+S`. |
 | **`NameError: name '\ufeff' is not defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `cpy` značku při kopírování odstraní sám a upozorní na to. Natrvalo: ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8`. |
@@ -319,4 +323,4 @@ Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu zajišť
 | **Linux/macOS: `./setup.sh` hlásí `Permission denied`** | Skript nemá příznak spustitelnosti (projekt rozbalený na Windows, na flashce nebo disku s FAT/NTFS). | Spusťte ho jako `bash setup.sh`. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`. |
 | **`Port COM5 nelze otevřít`** | Port drží jiný program (Serial Monitor, otevřený REPL, graf, Thonny). | Zavřete ho (Serial Monitor odpojte) a příkaz zopakujte. |
 | **Po nahrání se program nespustil** | Program vypnul autoreload (`supervisor.runtime.autoreload = False`), nebo je deska v nouzovém režimu. | `cpy check` ukáže příčinu; program spustíte `cpy reset`, nahrávat můžete s `cpy upload --stop`. |
-| **Ctrl+S nic nenahraje** | Soubor je v `.vscode/.ignoreCopy`, obsah na desce je stejný, nebo není připojený disk `CIRCUITPY`. | Panel *Output* → *Run On Save*: výpis po krocích ukáže, kde se kopírování zastavilo (`ERROR: v kroku N …` nebo `Konec: …`). Když v panelu není nic, Run on Save se vůbec nespustil – zkontrolujte, že je nainstalované rozšíření *Run on Save* a že má soubor příponu `.py`, `.toml`, `.json`, `.txt` nebo `.csv`. |
+| **Ctrl+S nic nenahraje** | Soubor pravidla v `.vscode/upload.toml` nepovolují (např. je v podsložce), obsah na desce je stejný, nebo není připojený disk `CIRCUITPY`. | Panel *Output* → *Run On Save*: výpis po krocích ukáže, kde se kopírování zastavilo (`ERROR: v kroku N …` nebo `Konec: …`). Když v panelu není nic, Run on Save se vůbec nespustil – zkontrolujte, že je nainstalované rozšíření *Run on Save* a že má soubor příponu `.py`, `.toml`, `.json`, `.txt` nebo `.csv`. |

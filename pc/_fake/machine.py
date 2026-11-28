@@ -4,7 +4,7 @@
 Falešný modul machine pro MicroPython na RP2040 (mpy sim, mpy test).
 
 Simuluje hardware desky tak, aby na PC běžel main.py i knihovna
-lib/picoed_v2_lib beze změny:
+lib_mpy/picoed_v2_lib beze změny:
 
 - Pin      digitální vstupy a výstupy, přerušení (irq)
 - PWM      pulzně šířková modulace (bzučák, jas LED)

@@ -29,7 +29,7 @@
 # musi umet nainstalovat i samotny Python.
 # ------------------------------------------------------------
 $ScriptName    = "setup.ps1"
-$ScriptVersion = "3.4"
+$ScriptVersion = "3.5"
 $ScriptDate    = "2026-11-26"
 
 # Python, ktery se nainstaluje, kdyz na pocitaci zadny neni.
@@ -167,14 +167,15 @@ Write-Host "--------------------------------------"
 # ------------------------------------------------------------
 # 3) Python knihovny do .venv
 # ------------------------------------------------------------
-Write-Host "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier)..." @ColorInfo
+Write-Host "[3/8] Kontrola Python knihoven v .venv (mpremote, matplotlib, python-minifier, tomli)..." @ColorInfo
 
 # Povinne: mpremote (MicroPython) a python-minifier (zmenseni souboru pri
-# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md)
-& $VenvPy -c "import mpremote, serial, python_minifier" >$null 2>&1
+# nahravani - micro:bit ma jen asi 20 kB, viz docs/MicroBit.md); tomli jen na
+# Pythonu starsim nez 3.11 (cteni .vscode/upload.toml, novejsi Python ma tomllib)
+& $VenvPy -c "import sys, mpremote, serial, python_minifier; sys.version_info >= (3, 11) or __import__('tomli')" >$null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "mpremote / python-minifier nenalezen. Instaluji pres pip..." @ColorInfo
-    & $VenvPy -m pip install --disable-pip-version-check mpremote python-minifier
+    & $VenvPy -m pip install --disable-pip-version-check mpremote python-minifier "tomli; python_version < '3.11'"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Instalace mpremote / python-minifier selhala." @ColorError
         exit 1

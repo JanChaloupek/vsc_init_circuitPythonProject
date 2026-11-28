@@ -9,7 +9,7 @@ Běžnou práci s MicroPythonem popisuje [MicroPython.md](MicroPython.md), vnit�
 ## 1. Shrnutí pro spěchající
 
 - **Úložiště má jen asi 20 kB.** Dřív dojde místo pro soubory než paměť RAM. Program s knihovnou kolem 19 kB se vejde jen na úplně prázdnou desku.
-- **Nemá složky.** `mpy upload` nahraje soubory z `lib/` přímo do kořene desky. Podsložky (balíčky, např. `lib/picoed_v2_lib/`) přeskočí.
+- **Nemá složky.** Na desku jdou jen soubory z kořene projektu; knihovny ze složek (`lib/`, `lib_mpy/`) se na micro:bit nenahrávají. Vlastní moduly dávejte vedle `main.py`.
 - **Je na něm starší MicroPython** (1.15). Nezná **f-řetězce** `f"..."`, texty skládejte pomocí `+`.
 - **Zmenšení souborů pomáhá.** `mpy minify simple` odstraní komentáře a dokumentaci, soubory jsou o 30–45 % menší. `mpy minify full` přejmenuje i lokální proměnné, v našich knihovnách to ušetřilo dalších asi 15 %. `mpy minify max` sloučí program s jeho moduly do jednoho `main.py` a přejmenuje všechno. Je to poslední záchrana, protože chybové hlášky pak přestanou dávat smysl.
 - **Přenos občas selže** falešnou chybou `SyntaxError`. `mpy` to pozná, vypíše důvod a příkaz sám zopakuje.
@@ -122,7 +122,7 @@ Jeden přepínač, který si projekt pamatuje zvlášť pro MicroPython (`mpy`) 
 Pravidla:
 - Zmenšuje se **jen to, co jde na desku**. Soubory v projektu zůstanou, jak jsou.
 - **`main.py`, `code.py` a `boot.py` se nezmenšují** (kromě úrovně `max`). Ty si ladíte vy a čísla řádků v chybové hlášce musí sedět s editorem.
-- U ostatních souborů (knihoven) chybová hláška ukáže **jiné číslo řádku**, než vidíte v editoru. Když hledáte chybu v konkrétní knihovně, vyřaďte ji ze zmenšení: `.\mpy minify exclude lib/robot.py` (zpět: `minify include`). Ostatní soubory zůstanou zmenšené. Vzory fungují jako v `.ignoreCopy`: `robot.py` (jméno kdekoliv), `lib/*.py`.
+- U ostatních souborů (knihoven) chybová hláška ukáže **jiné číslo řádku**, než vidíte v editoru. Když hledáte chybu v konkrétní knihovně, vyřaďte ji ze zmenšení: `.\mpy minify exclude lib/robot.py` (zpět: `minify include`). Ostatní soubory zůstanou zmenšené. Masky fungují jako v `.vscode/upload.toml`: `robot.py` (jméno kdekoliv), `/robot.py` (jen v kořeni), `lib_mpy/` (celá složka).
 - `full` nepřejmenuje třídy, funkce ani globální proměnné, protože je importují jiné soubory (`from cely_projekt import Robot`).
 - Jména, která se nesmí přejmenovat nikdy, přidáte příkazem `.\mpy minify keep jmeno1 jmeno2` (odebrání: `minify unkeep`).
 - Nastavení je v souboru `.vscode/deska.json`, který patří do gitu. Učitel ho tak může v šabloně přednastavit.
@@ -143,12 +143,12 @@ Totéž (kromě `max`) umí `cpy minify`, ale u CircuitPythonu (disk 1 MB) to ob
 
 ### Úroveň `max`: sloučení do jednoho souboru
 
-`main.py` a všechny **místní** moduly, které importuje (i nepřímo, z kořene projektu a z `lib/`), se sloučí do jednoho `main.py` v pořadí podle závislostí. Výsledek se zmenší včetně přejmenování tříd, funkcí a globálních proměnných. Na desku jde jen sloučený `main.py`.
+`main.py` a všechny **místní** moduly, které importuje (i nepřímo; na micro:bitu jen z kořene projektu, na Picu i z knihoven, které jdou do `/lib`), se sloučí do jednoho `main.py` v pořadí podle závislostí. Výsledek se zmenší včetně přejmenování tříd, funkcí a globálních proměnných. Na desku jde jen sloučený `main.py`.
 
 - **Cena:** chybová hláška pak mluví o třídách `A`, `D` a řádcích, které v editoru nenajdete, a to i v `main.py`. Používejte `max` jen tehdy, když se program nevejde ani s `full`.
 - Bloky `if __name__ == "__main__":` v importovaných modulech (jejich vlastní testy) se vynechají, jinak by se po sloučení spustily.
 - Modul vyřazený přes `minify exclude` se nesloučí: zůstane jako samostatný soubor se svými jmény a program ho normálně importuje.
-- Balíčky ve složkách (`lib/picoed_v2_lib/`) se neslučují a zůstanou jako cizí knihovny.
+- Balíčky ve složkách (např. `lib_mpy/picoed_v2_lib/` na Picu) se neslučují a zůstanou jako cizí knihovny.
 - Sloučení **odmítne** (s vysvětlením a radou použít `full`) program, ve kterém je `import modul` (použití `modul.neco`), `from modul import *`, import místního modulu uvnitř funkce nebo podmínky, relativní import, kruhový import, nebo stejné jméno definované ve dvou modulech. Co by `max` udělal, ukáže předem `mpy minify`.
 - Vyzkoušeno: zkušební program se dvěma moduly se po sloučení spustil správně na micro:bitu i na Picu. Sloučený `cely_projekt` + program (9 437 B) se na micro:bitu přeloží a naimportuje (RAM 9 104 B).
 
@@ -187,7 +187,7 @@ Program studenta (`mpy runmain`) se neopakuje, protože tam může být `SyntaxE
 ## 7. Co si pohlídat při psaní programu pro micro:bit
 
 - **Žádné f-řetězce.** Místo `print(f"Vzdalenost: {cm}")` pište `print("Vzdalenost: " + str(cm))`. S f-řetězcem program skončí hned po spuštění chybou `SyntaxError`.
-- **Moduly jako soubory přímo v `lib/`** (např. `lib/robot.py`), ne v podsložkách.
+- **Moduly jako soubory v kořeni projektu** (např. `robot.py` vedle `main.py`). Složky s knihovnami se na micro:bit nenahrávají; co přesně se nahraje, ukáže `.\mpy files microbit`.
 - **Hlídejte velikost.** Velké komentáře a dokumentační řetězce v knihovnách zabírají místo, které `mpy minify simple` vrátí. Vlastní program (`main.py`) se nezmenšuje, ať v něm chyby snadno najdete.
 - **Před nahráním většího projektu** použijte `mpy wipe`. Na čerstvě smazanou desku se vejde nejvíc.
 

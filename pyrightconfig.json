@@ -2,6 +2,8 @@
     "stubPath": "pc/_stubs",
     "extraPaths": [
         "lib",
+        "lib_cpy",
+        "lib_mpy",
         "pc/_stubs",
         "pc"
     ],

@@ -40,7 +40,7 @@
 #   ODDIL 2  Vypis na obrazovku (barvy, hlasky)
 #   ODDIL 3  Hledani desek (USB disky, seriove porty)
 #   ODDIL 4  Seriova konzole desky (REPL a raw REPL)
-#   ODDIL 5  Soubory projektu (.ignoreCopy) a stromovy vypis
+#   ODDIL 5  Soubory projektu (pravidla upload.toml) a stromovy vypis
 #   ODDIL 6  Spolecne prikazy (devices, vscode, graf)
 #   ODDIL 7  CircuitPython - prikazy cpy (a sim / test na PC pro cpy i mpy)
 #   ODDIL 8  MicroPython - prikazy mpy
@@ -71,8 +71,8 @@ from collections import deque
 from pathlib import Path
 
 SCRIPT_NAME = "deska.py"
-SCRIPT_VERSION = "2.6"
-SCRIPT_DATE = "2026-11-27"
+SCRIPT_VERSION = "2.7"
+SCRIPT_DATE = "2026-11-28"
 
 
 # ============================================================
@@ -80,8 +80,14 @@ SCRIPT_DATE = "2026-11-27"
 # ============================================================
 HERE = Path(__file__).resolve().parent          # slozka .vscode
 PROJECT = HERE.parent                            # koren projektu
-IGNORE_FILE = HERE / ".ignoreCopy"               # co se NEnahrava na CircuitPython
-UPLOAD_CONFIG = HERE / "upload_config.txt"       # co se nahrava na MicroPython
+UPLOAD_RULES = HERE / "upload.toml"              # co se nahrava na desku (CircuitPython i MicroPython)
+OLD_RULE_FILES = (".ignoreCopy", "upload_config.txt")   # drivejsi pravidla, uz se nepouzivaji
+# Slozky s knihovnami v projektu. Na desce jsou vsechny v jedne slozce /lib
+# (tam je hleda CircuitPython i MicroPython): lib/ = spolecne knihovny,
+# lib_cpy/ = jen CircuitPython, lib_mpy/ = jen MicroPython. Ktera slozka jde
+# na kterou desku, urcuje upload.toml; stejne ji pouziva i simulace na PC.
+LIB_DIRS = ("lib", "lib_cpy", "lib_mpy")
+BOARD_LIB = "lib"
 SETTINGS_FILE = HERE / "settings.json"           # nastaveni VS Code
 ACTIVE_FILE = HERE / ".active_device.json"       # rucne zvolena aktivni deska (mpy/cpy select)
 
@@ -112,9 +118,10 @@ MP_DEVICES = [
     (0x0D28, 0x0204, "BBC micro:bit (MicroPython)"),
 ]
 
-# Co se na CircuitPython desku nikdy nenahraje, i kdyby to v .ignoreCopy
-# chybelo. Vse ostatni urcuje .vscode/.ignoreCopy (jedno misto pro Ctrl+S
-# i pro "cpy upload").
+# Co se na desku nikdy nenahraje (CircuitPython i MicroPython), at je
+# v .vscode/upload.toml cokoliv. Navic se nikdy nenahravaji skryte polozky
+# (.git, .vscode, .venv, ...) a predprelozene knihovny .mpy jine platformy
+# (mpy_platform). Vse ostatni urcuje .vscode/upload.toml.
 SKIP_DIRS = {"__pycache__"}
 SKIP_FILES = ["*.pyc", "boot_out.txt"]
 # Systemove polozky na disku CIRCUITPY - nevypisuji se a nemazou.
@@ -996,53 +1003,287 @@ def terminal(ser, on_exit_hint=""):
 
 
 # ============================================================
-# ODDIL 5  Soubory projektu (.ignoreCopy) a stromovy vypis
+# ODDIL 5  Soubory projektu (pravidla .vscode/upload.toml) a stromovy vypis
 # ============================================================
-def load_ignore():
-    """Nacte masky z .vscode/.ignoreCopy (jedna maska na radek).
-    '*' odpovida libovolnemu textu vcetne '/', '**' znamena totez."""
-    patterns = []
-    with contextlib.suppress(OSError):
-        for raw in IGNORE_FILE.read_text(encoding="utf-8-sig").splitlines():
-            p = raw.strip().replace("\\", "/")
-            if p and not p.startswith("#"):
-                patterns.append(p.replace("**", "*"))
-    return patterns
+# Co se nahrava na desku, urcuje .vscode/upload.toml (stejne pro cpy upload,
+# Run on Save i mpy upload). Soubor se nahraje, kdyz je POVOLENY (sedi na nej
+# nektera maska z "enable") a neni ZAKAZANY (nesedi na nej zadna maska
+# z "disable"). Zakaz vyhrava vzdy, na poradi radku nezalezi. Ctou se jen
+# sekce, ktere plati pro danou desku (RULE_SECTIONS).
+# Masky:
+#   main.py, *.md   jmeno souboru kdekoliv v projektu (maska bez lomitka)
+#   /main.py, /*    od korene projektu - kazda maska s lomitkem se pocita
+#   lib/x.py        od korene; /* = soubory v koreni (slozky ne)
+#   lib/, docs/     slozka i se vsim uvnitr: slozka je maska s / na konci
+#   * a ?           cokoliv / jeden znak v jedne casti cesty, ** = pres slozky
+RULE_SECTIONS = {
+    "cpy": ("all", "circuitpython"),
+    "pico": ("all", "micropython", "micropython.pico"),
+    "microbit": ("all", "micropython", "micropython.microbit"),
+    "mpy": ("all", "micropython"),              # jina deska s MicroPythonem (ESP32, ...)
+}
+PROFILE_NAMES = {"cpy": "CircuitPython", "pico": "MicroPython - Raspberry Pi Pico / Pico:ed",
+                 "microbit": "MicroPython - BBC micro:bit", "mpy": "MicroPython - jina deska"}
+RULE_KEYS = ("enable", "disable")
+RULES_HELP = 'masky pis v uvozovkach a oddeluj carkou, napr.: disable = ["docs/", "*.md"]'
+_RULES = {}
+_MASKS = {}
 
 
-def skip_reason(rel, patterns, is_dir=False):
-    """Proc se polozka projektu (relativni cesta s '/') NEnahrava?
-    Vraci text duvodu, nebo None, kdyz se nahrava."""
+def rules_rel():
+    return UPLOAD_RULES.relative_to(PROJECT).as_posix()
+
+
+def rule_sections_text(profile):
+    return " + ".join(f"[{s}]" for s in RULE_SECTIONS[profile])
+
+
+def load_upload_rules():
+    """Nacte .vscode/upload.toml -> {"all": {"enable": [...], "disable": [...]}, ...}.
+    Sekce [micropython.microbit] je v TOML vnorena tabulka, tady ma klic
+    "micropython.microbit". Chyby v souboru hlasi srozumitelne."""
+    if "rules" in _RULES:
+        return _RULES["rules"]
+    rel = rules_rel()
+    for old in OLD_RULE_FILES:
+        if (HERE / old).exists():
+            warn(f".vscode/{old} se uz nepouziva - co se nahrava, urcuje {rel}. Soubor muzes smazat.")
+    if not UPLOAD_RULES.is_file():
+        raise CpyError(f"Chybi soubor s pravidly nahravani {rel}.\n"
+                       "       - zkopiruj ho ze sablony projektu (vsc_init_circuitPythonProject)")
+    try:
+        import tomllib
+    except ImportError:                         # Python 3.9 a 3.10
+        try:
+            import tomli as tomllib
+        except ImportError:
+            raise missing_lib("tomli", f" (cteni {rel} na Pythonu starsim nez 3.11)") from None
+    try:
+        data = tomllib.loads(UPLOAD_RULES.read_text(encoding="utf-8-sig"))
+    except tomllib.TOMLDecodeError as e:
+        raise CpyError(f"{rel}: chyba v zapisu - {e}.\n       - {RULES_HELP}") from None
+    known = {s for secs in RULE_SECTIONS.values() for s in secs}
+    rules = {}
+
+    def take(name, table):
+        if name not in known:
+            raise CpyError(f"{rel}: neznama sekce [{name}]. Zname sekce: "
+                           + ", ".join(f"[{s}]" for s in sorted(known)) + ".")
+        sec = {}
+        for key, val in table.items():
+            if isinstance(val, dict):
+                take(f"{name}.{key}", val)
+                continue
+            if key not in RULE_KEYS:
+                raise CpyError(f"{rel}: v sekci [{name}] je neznamy klic '{key}' (zname: enable, disable).")
+            vals = [val] if isinstance(val, str) else val
+            if not isinstance(vals, list) or not all(isinstance(v, str) for v in vals):
+                raise CpyError(f"{rel}: [{name}] {key} musi byt seznam masek.\n       - {RULES_HELP}")
+            sec[key] = [v.strip().replace("\\", "/") for v in vals if v.strip().strip("/")]
+        rules[name] = sec
+
+    for name, table in data.items():
+        if not isinstance(table, dict):
+            raise CpyError(f"{rel}: '{name} = ...' neni v zadne sekci - pravidla patri pod [all], "
+                           "[circuitpython], [micropython], ...")
+        take(name, table)
+    _RULES["rules"] = rules
+    return rules
+
+
+def _mask(mask):
+    """Rozebere masku: {file: regex pro cestu souboru, dir: regex pro slozku
+    (jen u masky s / na konci), segs: casti cesty, anchored, is_dir}."""
+    info = _MASKS.get(mask)
+    if info is None:
+        is_dir = mask.endswith("/")
+        anchored = "/" in mask
+        body = mask.strip("/")
+        out, i = [], 0
+        while i < len(body):
+            if body.startswith("**/", i):
+                out.append("(?:[^/]+/)*")
+                i += 3
+            elif body.startswith("**", i):
+                out.append(".*")
+                i += 2
+            elif body[i] == "*":
+                out.append("[^/]*")
+                i += 1
+            elif body[i] == "?":
+                out.append("[^/]")
+                i += 1
+            else:
+                out.append(re.escape(body[i]))
+                i += 1
+        core = ("" if anchored else "(?:[^/]+/)*") + "".join(out)
+        info = {"file": re.compile(core + ("/.+" if is_dir else ""), re.IGNORECASE),
+                "dir": re.compile(core, re.IGNORECASE) if is_dir else None,
+                "segs": body.split("/"), "anchored": anchored, "is_dir": is_dir}
+        _MASKS[mask] = info
+    return info
+
+
+def mask_match(mask, rel):
+    """Sedi maska na soubor rel (cesta od korene projektu s '/')?"""
+    return bool(_mask(mask)["file"].fullmatch(rel))
+
+
+def _mask_covers_dir(mask, rel_dir):
+    """Zakazuje maska celou slozku (maska slozky, ktera na ni sedi)?"""
+    rx = _mask(mask)["dir"]
+    return bool(rx and rx.fullmatch(rel_dir))
+
+
+def _mask_may_enable(mask, rel_dir):
+    """Muze maska povolit nejaky soubor uvnitr slozky rel_dir? (Kdyz zadna
+    maska nemuze, do slozky se vubec nechodi - napr. pc/, docs/.)"""
+    m = _mask(mask)
+    if not m["anchored"]:
+        return True
+    segs, dsegs = m["segs"], rel_dir.split("/")
+    for i, ds in enumerate(dsegs):
+        if i >= len(segs):
+            return m["is_dir"]
+        if segs[i] == "**" or "**" in segs[i]:
+            return True
+        if not fnmatch.fnmatchcase(ds.lower(), segs[i].lower()):
+            return False
+    return len(segs) > len(dsegs) or m["is_dir"]
+
+
+def mpy_platform(path):
+    """Pro koho je predprelozena knihovna .mpy: "cpy" (CircuitPython, soubor
+    zacina pismenem C), "mpy" (MicroPython, pismeno M), nebo None."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(1)
+    except OSError:
+        return None
+    return {b"C": "cpy", b"M": "mpy"}.get(head)
+
+
+def _always_skip(rel, is_dir=False):
+    """Pevne pojistky (plati vzdy, pravidla je neprebiji). Vraci duvod nebo None."""
     parts = rel.split("/")
     for part in parts:
         if part.startswith("."):
-            return "skryta polozka"
+            return "vzdy vynechano - skryta polozka"
         if part in SKIP_DIRS:
-            return part
+            return f"vzdy vynechano - {part}"
     if not is_dir and any(fnmatch.fnmatch(parts[-1], s) for s in SKIP_FILES):
-        return parts[-1]
-    probe = rel + "/__cpy_dir__" if is_dir else rel      # u slozky testujeme jeji obsah
-    for p in patterns:
-        if fnmatch.fnmatch(probe, p):
-            return f"maska '{p}' v .ignoreCopy"
+        return f"vzdy vynechano - {parts[-1]}"
     return None
 
 
-def project_files():
-    """Soubory projektu, ktere patri na CircuitPython desku (relativni
-    cesty s '/'). Poradi: knihovny v lib/, ostatni soubory, code.py
-    nakonec - aby se program spustil az se vsim, co potrebuje."""
-    patterns = load_ignore()
-    files = []
+def upload_check(rel, profile):
+    """Nahraje se soubor rel (cesta od korene projektu s '/') na desku
+    s profilem profile? Vraci (True/False, duvod)."""
+    why = _always_skip(rel)
+    if why:
+        return False, why
+    if rel.lower().endswith(".mpy"):
+        if profile == "microbit":
+            return False, "vzdy vynechano - micro:bit predprelozene knihovny .mpy neumi"
+        plat = mpy_platform(PROJECT / rel)
+        if plat and plat != ("cpy" if profile == "cpy" else "mpy"):
+            return False, "vzdy vynechano - .mpy pro " + ("CircuitPython" if plat == "cpy" else "MicroPython")
+    rules = load_upload_rules()
+    secs = RULE_SECTIONS[profile]
+    for sec in secs:
+        for m in rules.get(sec, {}).get("disable", []):
+            if mask_match(m, rel):
+                return False, f'disable "{m}" v [{sec}]'
+    for sec in secs:
+        for m in rules.get(sec, {}).get("enable", []):
+            if mask_match(m, rel):
+                return True, f'enable "{m}" v [{sec}]'
+    return False, "nepovoleno - nesedi na nej zadna maska enable"
+
+
+def upload_dir_check(rel_dir, profile):
+    """Ma smysl prochazet slozku rel_dir? Vraci (True/False, duvod)."""
+    why = _always_skip(rel_dir, is_dir=True)
+    if why:
+        return False, why
+    rules = load_upload_rules()
+    secs = RULE_SECTIONS[profile]
+    for sec in secs:
+        for m in rules.get(sec, {}).get("disable", []):
+            if _mask_covers_dir(m, rel_dir):
+                return False, f'disable "{m}" v [{sec}]'
+    if not any(_mask_may_enable(m, rel_dir) for sec in secs for m in rules.get(sec, {}).get("enable", [])):
+        return False, "nepovoleno - slozku nepovoluje zadna maska enable"
+    return True, ""
+
+
+def project_walk(profile):
+    """Projde projekt podle pravidel pro desku s profilem profile.
+    Vraci (soubory k nahrani, vynechane [(cesta, duvod)]). Cele vynechane
+    slozky jsou ve vynechanych jednou (s '/' na konci). Poradi souboru:
+    knihovny, ostatni soubory, hlavni program (code.py / main.py) nakonec -
+    aby se program spustil az se vsim, co potrebuje."""
+    files, skipped = [], []
     for root, dirs, names in os.walk(PROJECT):
         rel_root = Path(root).relative_to(PROJECT).as_posix()
         rel_root = "" if rel_root == "." else rel_root + "/"
-        dirs[:] = sorted(d for d in dirs if not skip_reason(rel_root + d, patterns, is_dir=True))
-        for n in sorted(names):
-            if not skip_reason(rel_root + n, patterns):
+        keep = []
+        for d in sorted(dirs, key=str.lower):
+            ok, why = upload_dir_check(rel_root + d, profile)
+            if ok:
+                keep.append(d)
+            else:
+                skipped.append((rel_root + d + "/", why))
+        dirs[:] = keep
+        for n in sorted(names, key=str.lower):
+            ok, why = upload_check(rel_root + n, profile)
+            if ok:
                 files.append(rel_root + n)
-    files.sort(key=lambda r: (r == CP_ENTRY, not r.startswith("lib/"), r.lower()))
-    return files
+            else:
+                skipped.append((rel_root + n, why))
+    entry = CP_ENTRY if profile == "cpy" else MP_ENTRY
+    files.sort(key=lambda r: (r == entry, r.split("/")[0] not in LIB_DIRS, r.lower()))
+    return files, skipped
+
+
+def project_files(profile="cpy"):
+    """Soubory projektu, ktere patri na desku (relativni cesty s '/')."""
+    return project_walk(profile)[0]
+
+
+def board_path(rel):
+    """Kam soubor projektu patri na desce: lib_cpy/x.py a lib_mpy/x.py jdou
+    do lib/x.py (na desce je jen jedna slozka s knihovnami), ostatni beze zmeny."""
+    parts = rel.split("/")
+    if len(parts) > 1 and parts[0] in LIB_DIRS:
+        return "/".join([BOARD_LIB] + parts[1:])
+    return rel
+
+
+def board_layout(files, profile):
+    """Cesty na desce pro soubory projektu a problemy: dva soubory se stejnou
+    cestou na desce (lib/x.py a lib_mpy/x.py) a na micro:bitu cokoliv ve
+    slozce (micro:bit slozky nema). Vraci ({rel: cesta na desce}, [problemy])."""
+    out, by_dst, problems = {}, {}, []
+    for rel in files:
+        dst = board_path(rel)
+        key = dst.lower()
+        if key in by_dst:
+            problems.append(f"{by_dst[key]} a {rel} by na desce byly pod stejnym jmenem {dst}")
+        else:
+            by_dst[key] = rel
+        out[rel] = dst
+    if profile == "microbit":
+        for d in sorted({rel.split("/")[0] + "/" for rel, dst in out.items() if "/" in dst}):
+            problems.append(f"{d} - micro:bit nema slozky, na desku muzou jen soubory z korene projektu "
+                            f"(vyrad ji v {rules_rel()}, sekce [micropython.microbit])")
+    return out, problems
+
+
+def profile_lib_dirs(profile):
+    """Slozky s knihovnami, ktere jdou na desku s profilem profile (podle
+    upload.toml) - stejne je pouziva simulace na PC (sys.path)."""
+    return [d for d in LIB_DIRS if (PROJECT / d).is_dir() and upload_dir_check(d, profile)[0]]
 
 
 # BOM (Byte Order Mark) jsou 3 neviditelne bajty na zacatku souboru, ktere
@@ -1090,8 +1331,8 @@ def minify_keep():
 
 def minify_exclude():
     """Soubory, ktere se nezmensuji (deska.json: minify_exclude) - napr. knihovna,
-    ve ktere prave hledas chybu. Vzory jako v .ignoreCopy: 'robot.py' (jmeno
-    kdekoliv), 'lib/motor.py' (cesta v projektu), 'lib/*.py'."""
+    ve ktere prave hledas chybu. Masky jako v upload.toml: 'robot.py' (jmeno
+    kdekoliv), 'lib/motor.py' (cesta v projektu), 'lib/*.py', 'lib_mpy/'."""
     pats = load_project_settings().get("minify_exclude", [])
     return [p for p in pats if isinstance(p, str) and p.strip()] if isinstance(pats, list) else []
 
@@ -1104,8 +1345,8 @@ def minify_excluded(src):
         rel = src.resolve().relative_to(PROJECT.resolve()).as_posix()
     except ValueError:
         rel = src.name
-    return any(fnmatch.fnmatch(rel, p.replace("\\", "/").lstrip("./")) or fnmatch.fnmatch(src.name, p)
-               for p in minify_exclude())
+    masks = [p.replace("\\", "/").removeprefix("./") for p in minify_exclude()]
+    return any(mask_match(m, rel) for m in masks if m.strip("/"))
 
 
 def save_project_settings(data):
@@ -1203,19 +1444,27 @@ def board_bytes(src, tool="cpy"):
     return data
 
 
-def mp_merge_program(main_file, search_dirs):
+def mp_merge_program(main_file, files):
     """Slouci main_file a mistni moduly, ktere importuje (i neprimo), do
     jednoho zdrojaku (uroven minify max). Mistni modul = soubor <jmeno>.py
-    v search_dirs (koren projektu, lib/), ktery neni vyrazeny (minify_exclude).
+    z files (soubory, ktere jdou na desku), ktery je na desce v koreni nebo
+    primo v lib/ a neni vyrazeny (minify_exclude). Kdyz je stejne jmeno
+    v koreni i v knihovnach, plati koren (jako na desce).
     Vraci (zdrojak, seznam sloucenych souboru). Kdyz slucovat nejde, vyhodi
     CpyError s vysvetlenim (a co s tim)."""
     import ast
     modules = {}
-    for d in search_dirs:
-        for f in sorted(d.glob("*.py")) if d.is_dir() else []:
-            if f.stem not in modules and f.resolve() != main_file.resolve() and not (
-                    f.name not in NO_MINIFY and minify_excluded(f)):
-                modules[f.stem] = f
+    cands = []
+    for f in files:
+        rel = f.resolve().relative_to(PROJECT.resolve()).as_posix()
+        dst = board_path(rel)
+        if f.suffix.lower() == ".py" and (dst.count("/") == 0 or (dst.count("/") == 1
+                                                                 and dst.startswith(BOARD_LIB + "/"))):
+            cands.append((dst.count("/"), dst.lower(), f))
+    for _depth, _dst, f in sorted(cands):
+        if f.stem not in modules and f.resolve() != main_file.resolve() and not (
+                f.name not in NO_MINIFY and minify_excluded(f)):
+            modules[f.stem] = f
     order, state, trees = [], {}, {}
     HINT = " Pouzij 'from modul import jmeno', nebo nizsi uroven: mpy minify full."
 
@@ -1539,7 +1788,7 @@ PANEL_BUTTONS = [
     ("pc-test-mpy", "$(beaker) Testy main.py",    "\u2713  Testy main.py",     "mpy test",   "lightblue",  _PC,  False),
 ]
 # Run on Save: po ulozeni souboru s touto priponou se zavola "cpy save".
-# Ktere soubory se opravdu zkopiruji, rozhodne .vscode/.ignoreCopy.
+# Ktere soubory se opravdu zkopiruji, rozhodne .vscode/upload.toml.
 RUN_ON_SAVE_MATCH = r"\.(py|toml|json|txt|csv)$"
 
 
@@ -1582,7 +1831,7 @@ def cmd_vscode(opts):
         say(f"Nastaveni zapsano: {SETTINGS_FILE}", "done")
     else:
         say(f"Nastaveni uz je aktualni: {SETTINGS_FILE}", "done")
-    say(f"   Run on Save: soubory {RUN_ON_SAVE_MATCH} -> cpy save (podle .ignoreCopy)")
+    say(f"   Run on Save: soubory {RUN_ON_SAVE_MATCH} -> cpy save (podle upload.toml)")
     say(f"   Panel: bloky MicroPython, CircuitPython a Na PC bez desky, {len(buttons)} tlacitek, z toho "
         f"{sum(1 for b in PANEL_BUTTONS if b[6])} ve stavovem radku ({py} .vscode/deska.py ...)")
     say("   Bloky MicroPython a CircuitPython ukazuji pripojene desky (devices --json).")
@@ -1861,10 +2110,10 @@ def board_paused(board, reload_after=True):
 
 def plan_upload(drive, rels, force=False):
     """Ktere soubory se opravdu musi kopirovat (lisi se od desky)
-    a kolik mista na disku navic zaberou."""
+    a kolik mista na disku navic zaberou. Cil na desce: board_path()."""
     plan, needed = [], 0
     for rel in rels:
-        src, dst = PROJECT / rel, drive / rel
+        src, dst = PROJECT / rel, drive / board_path(rel)
         if not force and same_content(src, dst):
             continue
         old = dst.stat().st_size if dst.is_file() else 0
@@ -1879,16 +2128,144 @@ def check_space(drive, needed):
         raise CpyError(f"Na desce neni dost mista: potreba {needed} B, volno {free} B.")
 
 
-def do_upload(drive, plan):
-    """Zkopiruje soubory rychle za sebou (autoreload pak restartuje jen jednou)."""
+# Zapis na disk CIRCUITPY selhal (casto 'Permission denied' / Errno 13): deska
+# obcas hlasi disk jako chraneny proti zapisu. Overeno 2026-11-28: pomohl
+# restart cele desky pres seriovy port - deska se znovu pripoji a disk je
+# zase zapisovatelny. Teprve kdyz to nepomuze, je potreba odpojit napajeni.
+CP_WRITE_TIPS = ("disk muze byt jen pro cteni - restartuj desku: .\\cpy reset --hard "
+                 "(odpoji se z USB a znovu pripoji) a nahraj znovu",
+                 "kdyz to nepomuze: odpoj USB kabel, vypni napajeni robota, zapni ho a kabel zapoj zpet",
+                 "boot.py se storage.remount() dela disk pro PC jen pro cteni natrvalo - zkontroluj ho",
+                 "nebyla deska behem zapisu odpojena?")
+
+# Automaticky restart pri disku jen pro cteni (cpy save, upload, main, setup):
+# misto rady "restartuj desku" to deska.py zkusi samo - jednou za prikaz.
+# Pojistky (jinak se restart nezkousi a vypisou se rady CP_WRITE_TIPS):
+#   - jen pri chybe ochrany proti zapisu (write_protected), ne pri jine chybe
+#   - ne kdyz disk zamyka boot.py (storage.remount) - restart by nepomohl
+#   - ne znovu do AUTO_RESTART_PAUSE s (Run on Save bezi pri kazdem Ctrl+S,
+#     pri trvale chybe by se deska jinak restartovala dokola); cas posledniho
+#     pokusu je u uzivatele v AUTO_RESTART_FILE (podle UID desky)
+#   - ne kdyz je seriovy port obsazeny (Serial Monitor, REPL, --watch, --stop)
+AUTO_RESTART_FILE = HW_FILE.parent / "auto_restart.json"
+AUTO_RESTART_PAUSE = float(os.environ.get("DESKA_AUTO_RESTART_PAUSE") or 180)   # promenna jen pro testy
+_AUTO_RESTART = {"tried": False, "restarted": False}
+
+
+def write_protected(e):
+    """Je chyba zapisu ochrana proti zapisu (disk jen pro cteni)?
+    Errno 13 (Windows: Permission denied), Errno 30 (Linux/macOS: read-only
+    file system), WinError 19 (write protect). Soubor otevreny jinym programem
+    (WinError 32) to neni."""
+    if not isinstance(e, OSError) or getattr(e, "winerror", None) == 32:
+        return False
+    return e.errno in (13, 30) or getattr(e, "winerror", None) in (5, 19)
+
+
+def cp_auto_restart(board, drive, report):
+    """Disk CIRCUITPY je jen pro cteni: zkusi jednou restartovat celou desku
+    (microcontroller.reset pres seriovy port). Deska se odpoji z USB a znovu
+    pripoji a disk byva zase zapisovatelny (overeno 2026-11-28). report(text,
+    kind) vypisuje prubeh. Vraci disk po restartu (pismeno se muze zmenit),
+    nebo None, kdyz se restart nezkousel nebo nepovedl."""
+    if _AUTO_RESTART["tried"]:
+        return None
+    _AUTO_RESTART["tried"] = True
+    with contextlib.suppress(OSError):
+        if "remount" in (drive / "boot.py").read_text(encoding="utf-8", errors="replace"):
+            report("disk zamyka boot.py (storage.remount) - restart desky by nepomohl", "warn")
+            return None
+    uid = board.boot_info()["uid"]
+    key = uid or str(drive)
+    state = {}
+    with contextlib.suppress(Exception):
+        state = json.loads(AUTO_RESTART_FILE.read_text(encoding="utf-8"))
+    ago = time.time() - float(state.get(key, 0))
+    if ago < AUTO_RESTART_PAUSE:
+        report(f"desku jsem automaticky restartoval pred {int(ago)} s - znovu to nezkousim", "warn")
+        return None
+    port = board.port_or_none()
+    if not port:
+        report("seriovy port desky nenalezen - automaticky restart nejde", "warn")
+        return None
+    try:
+        repl = Repl(port)
+    except CpyError:
+        report(f"disk {drive} je jen pro cteni; automaticky restart desky nejde - port {port} "
+               "je obsazeny (Serial Monitor, REPL?)", "warn")
+        return None
+    report(f"disk {drive} je jen pro cteni - restartuji celou desku (port {port}) a zapis zopakuji", "warn")
+    with repl:
+        repl.interrupt()
+        repl.fire_and_forget("import microcontroller\nmicrocontroller.reset()\n")
+    state[key] = time.time()
+    with contextlib.suppress(Exception):
+        AUTO_RESTART_FILE.parent.mkdir(parents=True, exist_ok=True)
+        AUTO_RESTART_FILE.write_text(json.dumps(state), encoding="utf-8")
+    _AUTO_RESTART["restarted"] = True
+
+    def port_back():
+        return any(p.device == port or (uid and (p.serial_number or "").upper() == uid) for p in list_ports())
+
+    def drive_back():
+        for d in find_drives(DRIVE_LABEL):
+            if (uid and read_boot_out(d)["uid"] == uid) or (not uid and str(d) == str(drive)):
+                return d
+        return None
+    wait_for(lambda: not port_back(), 5, 0.1)  # port nejdriv zmizi ...
+    if not wait_for(port_back, 20):              # ... a pak se vrati
+        report("deska se po restartu neozvala", "error")
+        return None
+    new = wait_for(drive_back, 20)
+    if not new:
+        report("disk CIRCUITPY se po restartu neobjevil", "error")
+        return None
+    time.sleep(1)                               # disk se jeste dopripojuje
+    board._drive, board._port = new, None
+    report(f"deska restartovana, disk {new} je zpet - zkousim zapis znovu", "info")
+    return new
+
+
+def cp_write_tips():
+    """Rady pri chybe zapisu - po neuspesnem automatickem restartu bez rady 'restartuj'."""
+    if _AUTO_RESTART["restarted"]:
+        return ("automaticky restart desky nepomohl", *CP_WRITE_TIPS[1:])
+    return CP_WRITE_TIPS
+
+
+def cp_write(board, drive, src, dst_rel, report, announce_bom=False):
+    """Zapise soubor src na disk desky jako dst_rel. Kdyz je disk jen pro
+    cteni, zkusi jednou automaticky restart desky (cp_auto_restart) a zapis
+    zopakuje. Vraci disk (po restartu muze byt jiny), chybu zapisu vyhodi."""
+    try:
+        copy_file(src, drive / dst_rel, announce_bom=announce_bom)
+        return drive
+    except OSError as e:
+        if not write_protected(e):
+            raise
+        new = cp_auto_restart(board, drive, report)
+        if not new:
+            raise
+    copy_file(src, new / dst_rel, announce_bom=announce_bom)
+    return new
+
+
+def do_upload(drive, plan, board=None):
+    """Zkopiruje soubory rychle za sebou (autoreload pak restartuje jen jednou).
+    Vraci (pocet, disk) - disk se po automatickem restartu muze zmenit."""
     for rel in plan:
-        say("Nahravam: " + col(rel, "dir" if "/" in rel else "file"))
+        dst = board_path(rel)
+        say("Nahravam: " + col(rel, "dir" if "/" in rel else "file") + (f" -> {dst}" if dst != rel else ""))
         try:
-            copy_file(PROJECT / rel, drive / rel)
+            if board:
+                drive = cp_write(board, drive, PROJECT / rel, dst, lambda t, k: say("   " + t, k),
+                                 announce_bom=True)
+            else:
+                copy_file(PROJECT / rel, drive / dst)
         except OSError as e:
-            raise CpyError(f"Kopirovani '{rel}' selhalo: {e}\n"
-                           "       - neni disk jen pro cteni (boot.py se storage.remount)?")
-    return len(plan)
+            raise CpyError(f"Kopirovani '{rel}' selhalo: {e}"
+                           + "".join(f"\n       - {t}" for t in cp_write_tips()))
+    return len(plan), drive
 
 
 def board_entries(drive):
@@ -2005,18 +2382,22 @@ def step_program_output(st, repl, seconds=2.5):
     return failed
 
 
-def cp_upload_files(board, opts, rels, title, rules_info=True):
+def cp_upload_files(board, opts, rels, title, rules_info=True, skipped=()):
     """Spolecny postup pro 'cpy upload' a 'cpy main' s podrobnym vypisem."""
     st = Steps(title)
 
     # 1) Co se nahrava
     st.head("Co se nahrava")
     if rules_info:
-        patterns = load_ignore()
-        st.info("pravidla:", f".vscode/.ignoreCopy ({len(patterns)} masek)" if IGNORE_FILE.is_file()
-                else ".vscode/.ignoreCopy NEEXISTUJE - plati jen vestavene pojistky")
+        st.info("pravidla:", f"{rules_rel()} - {rule_sections_text('cpy')}")
+        if skipped:
+            st.info("vynechano:", f"{len(skipped)} polozek (co a proc: .\\cpy files)")
         if (PROJECT / CP_ENTRY).is_file() and CP_ENTRY not in rels:
-            st.info("pozor:", f"{CP_ENTRY} je v .ignoreCopy - nenahraje se", "warn")
+            st.info("pozor:", f"{CP_ENTRY} pravidla vylucuji - nenahraje se", "warn")
+    problems = board_layout(rels, "cpy")[1]
+    if problems:
+        st.fail("soubory by se na desce prepsaly.", *problems,
+                "prejmenuj jeden z nich (na desce jsou lib/, lib_cpy/ i lib_mpy/ v jedne slozce lib)")
     git_conflict_step(st, [PROJECT / r for r in rels if (PROJECT / r).is_file()])
     minify_report(st, "cpy", [PROJECT / r for r in rels])
     for rel in rels:
@@ -2026,7 +2407,7 @@ def cp_upload_files(board, opts, rels, title, rules_info=True):
         if has_bom(PROJECT / rel):
             st.info("pozor:", f"{rel} ma BOM - na desku pujde bez nej", "warn")
     if not rels:
-        st.done("Konec: v projektu neni nic k nahrani (vse vylucuje .ignoreCopy).")
+        st.done(f"Konec: v projektu neni nic k nahrani (vse vylucuji pravidla v {rules_rel()}).")
         return
 
     # 2) Disk
@@ -2059,12 +2440,13 @@ def cp_upload_files(board, opts, rels, title, rules_info=True):
     with write_session(board, opts):
         for rel in plan:
             try:
-                copy_file(PROJECT / rel, drive / rel, announce_bom=False)
+                drive = cp_write(board, drive, PROJECT / rel, board_path(rel),
+                                 lambda t, k: st.info("restart:", t, k))
             except OSError as e:
-                st.fail(f"zapis '{rel}' na disk {drive} selhal: {e}",
-                        "neni disk jen pro cteni (boot.py se storage.remount)?",
-                        "nebyla deska behem zapisu odpojena?")
-            st.info("nahrano:", f"{rel} ({(drive / rel).stat().st_size} B)")
+                st.fail(f"zapis '{rel}' na disk {drive} selhal: {e}", *cp_write_tips())
+            dst = board_path(rel)
+            st.info("nahrano:", f"{rel}" + (f" -> {dst}" if dst != rel else "")
+                    + f" ({(drive / dst).stat().st_size} B)")
     if (drive / "main.py").exists() and (drive / CP_ENTRY).exists():
         st.info("pozor:", "na desce je i main.py - CircuitPython ho ignoruje (spousti code.py)", "warn")
     st.done(f"Hotovo: nahrano {len(plan)} souboru za {time.monotonic() - t0:.1f} s. "
@@ -2072,8 +2454,9 @@ def cp_upload_files(board, opts, rels, title, rules_info=True):
 
 
 def cp_upload(board, opts):
-    """cpy upload: nahraje projekt (jen zmenene soubory) podle .ignoreCopy."""
-    cp_upload_files(board, opts, project_files(), "Nahrani projektu na desku s CircuitPythonem")
+    """cpy upload: nahraje projekt (jen zmenene soubory) podle .vscode/upload.toml."""
+    files, skipped = project_walk("cpy")
+    cp_upload_files(board, opts, files, "Nahrani projektu na desku s CircuitPythonem", skipped=skipped)
 
 
 def cp_main(board, opts):
@@ -2090,12 +2473,12 @@ def _fmt_mtime(path):
 
 def cp_save(board, opts):
     """cpy save <soubor>: vola Run on Save po Ctrl+S. Zkopiruje JEDEN soubor,
-    pokud ho .ignoreCopy nevylucuje a lisi se od desky. Seriovou linku
+    pokud ho pravidla (upload.toml) povoluji a lisi se od desky. Seriovou linku
     nepouziva (studenti mivaji otevreny Serial Monitor).
 
     Vypis je zamerne podrobny a po krocich (jako puvodni copy.ps1), aby se
     v panelu Output -> Run On Save dalo poznat, kde presne je problem:
-      1) ulozeny soubor   2) pravidla .ignoreCopy   3) disk CIRCUITPY
+      1) ulozeny soubor   2) pravidla upload.toml   3) disk CIRCUITPY
       4) cil na desce a porovnani obsahu   5) kopirovani
     Chyba se vzdy ohlasi jako 'ERROR: v kroku N - ...' s radou, co s ni delat."""
     if not opts.args:
@@ -2124,19 +2507,21 @@ def cp_save(board, opts):
                      else "minify exclude") + ")") if minify_excluded(src)
                 else f"tento soubor se zmensi: na desku jde {len(board_bytes(src))} B")
 
-    # 2) Pravidla .ignoreCopy
-    st.head("Pravidla (co se na desku nekopiruje)")
-    patterns = load_ignore()
-    if IGNORE_FILE.is_file():
-        st.info("soubor:", f"{IGNORE_FILE.relative_to(PROJECT).as_posix()} ({len(patterns)} masek)")
-    else:
-        st.info("soubor:", f"{IGNORE_FILE} NEEXISTUJE - plati jen vestavene pojistky")
-    reason = skip_reason(rel, patterns)
-    if reason:
+    # 2) Pravidla upload.toml
+    st.head("Pravidla (co se na desku kopiruje)")
+    st.info("soubor:", f"{rules_rel()} - {rule_sections_text('cpy')}")
+    ok, reason = upload_check(rel, "cpy")
+    if ok:
+        parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+        while ok and parent:                    # soubor ve vynechane slozce (napr. pc/x/y.py)
+            ok, why = upload_dir_check(parent, "cpy")
+            reason = reason if ok else f"slozka {parent}/: {why}"
+            parent = parent.rsplit("/", 1)[0] if "/" in parent else ""
+    if not ok:
         st.info("vysledek:", f"NEKOPIRUJE SE ({reason})")
-        st.done(f"Konec: '{rel}' se na desku nekopiruje. Jestli tam patri, uprav .vscode/.ignoreCopy.")
+        st.done(f"Konec: '{rel}' se na desku nekopiruje. Jestli tam patri, uprav {rules_rel()}.")
         return 0
-    st.info("vysledek:", "kopiruje se (zadna maska neodpovida)")
+    st.info("vysledek:", f"kopiruje se ({reason})")
 
     # 3) Disk CIRCUITPY
     drive = cp_step_drive(st, board)
@@ -2144,7 +2529,7 @@ def cp_save(board, opts):
 
     # 4) Cil na desce a porovnani
     st.head("Cil na desce")
-    dst = drive / rel
+    dst = drive / board_path(rel)
     st.info("cil:", dst)
     if dst.is_file():
         st.info("na desce:", f"{dst.stat().st_size} B, zmenen {_fmt_mtime(dst)}")
@@ -2166,11 +2551,10 @@ def cp_save(board, opts):
     st.head("Kopirovani")
     t0 = time.monotonic()
     try:
-        copy_file(src, dst, announce_bom=False)
+        drive = cp_write(board, drive, src, board_path(rel), lambda t, k: st.info("restart:", t, k))
+        dst = drive / board_path(rel)
     except OSError as e:
-        st.fail(f"zapis na disk {drive} selhal: {e}",
-                "neni disk jen pro cteni (boot.py se storage.remount)?",
-                "nebyla deska behem zapisu odpojena?")
+        st.fail(f"zapis na disk {drive} selhal: {e}", *cp_write_tips())
     st.info("vysledek:", f"OK, zapsano {dst.stat().st_size} B za {time.monotonic() - t0:.2f} s")
     st.done(f"Hotovo: {rel} -> {dst}. CircuitPython program sam restartuje (autoreload).")
     return 0
@@ -2475,7 +2859,7 @@ def cp_setup(board, opts):
         line()
         plan, needed = plan_upload(drive, project_files(), True)
         check_space(drive, needed)
-        do_upload(drive, plan)
+        _count, drive = do_upload(drive, plan, board)
     say("")
     say("KROK 3/3: obsah desky", "info")
     line()
@@ -2717,8 +3101,10 @@ def pc_hardware(rezim, platforma="cpy", deska="picoed"):
     if not (PC_DIR / "_fake").is_dir():
         raise CpyError(f"Chybi slozka {PC_DIR / '_fake'} s falesnym hardwarem.")
     # Hledani modulu: program studenta a jeho moduly (koren projektu),
-    # knihovny (lib/, jako /lib na desce), pc/ (_fake, tests, simulace)
-    for p in (PC_DIR, PROJECT / "lib", PROJECT):
+    # knihovny (jako /lib na desce: slozky z LIB_DIRS, ktere podle upload.toml
+    # jdou na tuto desku - napr. lib/ a lib_mpy/), pc/ (_fake, tests, simulace)
+    libs = [PROJECT / d for d in profile_lib_dirs("cpy" if platforma == "cpy" else "pico")]
+    for p in (PC_DIR, *reversed(libs), PROJECT):
         if str(p) not in sys.path:
             sys.path.insert(0, str(p))
     rezim_modul = importlib.import_module("_fake._rezim")
@@ -2729,7 +3115,7 @@ def pc_hardware(rezim, platforma="cpy", deska="picoed"):
         for alias, name in MPY_ALIASES.items():
             sys.modules[alias] = sys.modules.get(name) or importlib.import_module(name)
         sys.modules["machine"].nastav_desku(deska)
-        # lib/picoed_v2_lib: displej a bzucak oznamuji jen vysledek (text, melodii)
+        # lib_mpy/picoed_v2_lib: displej a bzucak oznamuji jen vysledek (text, melodii)
         importlib.import_module("_fake._mp_knihovny").obal()
     return rezim_modul
 
@@ -2970,109 +3356,106 @@ def mp_ready_port(opts, st=None):
     st.fail("deska neodpovida ani po restartu.", *MP_BUSY_TIPS)
 
 
-def mp_upload_items():
-    """Polozky z .vscode/upload_config.txt (soubory a slozky k nahrani)."""
-    if not UPLOAD_CONFIG.is_file():
-        raise CpyError(f"Nenalezen soubor s konfiguraci: {UPLOAD_CONFIG}")
-    items = []
-    for raw in UPLOAD_CONFIG.read_text(encoding="utf-8-sig").splitlines():
-        s = raw.strip()
-        if s and not s.startswith("#"):
-            items.append(s.replace("\\", "/").rstrip("/"))
-    return items
-
-
 # BBC micro:bit (i Calliope mini) ma ploche uloziste: zadne slozky, chybi
 # os.mkdir i modul json. Pozna se podle USB VID:PID (rozhrani DAPLink).
 MP_FLAT_USB = {(0x0D28, 0x0204)}
+RPI_VID = 0x2E8A                # Raspberry Pi (Pico, Pico W, Pico:ed)
+
+
+def mp_profile(port):
+    """Ktera pravidla upload.toml plati pro MicroPython desku na portu:
+    "microbit", "pico" (RP2040 / RP2350), nebo "mpy" (jina deska).
+    Pozna se podle USB VID:PID - port se neotevira."""
+    for p in list_ports():
+        if port and p.device.upper() == str(port).upper():
+            if (p.vid, p.pid) in MP_FLAT_USB:
+                return "microbit"
+            if p.vid == RPI_VID:
+                return "pico"
+    return "mpy"
+
+
+def mp_guess_profile(opts):
+    """Profil pravidel bez otevreni portu: podle pripojene (vybrane) desky,
+    bez desky "mpy" (jen [all] + [micropython])."""
+    with contextlib.suppress(Exception):
+        port = mp_locate(opts)[0]
+        if port:
+            return mp_profile(port)
+    return "mpy"
 
 
 def mp_is_flat(port):
     """True, kdyz je na portu deska bez slozek (micro:bit)."""
-    return any(p.device.upper() == str(port).upper() and (p.vid, p.pid) in MP_FLAT_USB
-               for p in list_ports())
+    return mp_profile(port) == "microbit"
 
 
-def mp_cp_plan(items, flat, root=PROJECT):
-    """Argumenty pro mpremote (vsechno jednim spojenim, prikazy spojene '+'),
-    pocet nahravanych souboru a preskocene slozky. root = odkud se kopiruje
-    (projekt, nebo docasna slozka se zmensenymi soubory - viz mp_stage).
+def mp_cp_plan(files, flat):
+    """Argumenty pro mpremote (vsechno jednim spojenim, prikazy spojene '+').
+    files = cesty NA DESCE (v docasne slozce z mp_stage jsou soubory presne
+    tak, jak maji byt na desce, nic jineho tam neni).
     - Soubor se kopiruje pod svym jmenem (cil ':main.py', ne jen ':'):
       micro:bit by ho jinak ulozil pod prazdne jmeno.
-    - Slozka: 'cp -r'. Na micro:bitu (flat) slozky nejsou - soubory ze
-      slozky jdou primo do korene a podslozky (balicky) se preskoci."""
-    args, count, skipped = [], 0, []
+    - Slozka (lib): 'cp -r' - mpremote si ji na desce sam vytvori.
+    - micro:bit (flat) slozky nema - tam jdou jen soubory z korene."""
+    args = []
 
     def add(*a):
         if args:
             args.append("+")
         args.extend(a)
 
-    for item in items:
-        src = root / item
-        if not src.exists():
-            continue
-        if src.is_file():
-            add("cp", item, ":" + src.name)
-            count += 1
-        elif not flat:
-            add("cp", "-r", item, ":")
-            count += sum(1 for f in src.rglob("*") if f.is_file())
-        else:
-            for f in sorted(src.iterdir()):
-                rel = f.relative_to(root).as_posix()
-                if f.is_file():
-                    add("cp", rel, ":" + f.name)
-                    count += 1
-                elif f.is_dir() and not f.name.startswith((".", "__pycache__")):
-                    skipped.append(rel + "/")
-    return args, count, skipped
+    dirs = sorted({f.split("/")[0] for f in files if "/" in f}, key=str.lower)
+    for d in dirs:
+        add("cp", "-r", d, ":")
+    for f in files:
+        if "/" not in f:
+            add("cp", f, ":" + f)
+    return args
 
 
 @contextlib.contextmanager
-def mp_stage(items):
-    """Kdyz je zapnute zmenseni (mpy minify simple / full), pripravi kopii polozek do
-    docasne slozky: .py soubory zmensene a bez BOM, ostatni beze zmeny.
-    mpremote pak nahrava z ni (a porovnava se zmensenym obsahem, takze
-    nezmenene soubory porad preskoci). U urovne "max" je v kopii misto
-    main.py slouceny a zmenseny program a sloucene moduly v ni nejsou.
-    Vraci (koren, pocet zmensenych, puvodni velikost, nova velikost,
-    sloucene soubory)."""
-    level = minify_enabled("mpy")
-    if not level:
-        yield PROJECT, 0, 0, 0, []
-        return
+def mp_stage(files):
+    """Pripravi do docasne slozky presne to, co ma byt na desce: soubory
+    projektu files (podle upload.toml) pod jejich cestou na desce
+    (board_path: lib_mpy/x.py -> lib/x.py), .py bez BOM a pri zapnutem
+    zmenseni (mpy minify) zmensene. mpremote pak nahrava jen z ni - nic
+    jineho (napr. __pycache__) se na desku nedostane - a porovnava se
+    zmensenym obsahem, takze nezmenene soubory porad preskoci. U urovne "max"
+    je v ni misto main.py slouceny a zmenseny program a sloucene moduly v ni
+    nejsou. Vraci (koren, cesty na desce, pocet zmensenych, puvodni velikost,
+    nova velikost, sloucene soubory)."""
     import tempfile
+    level = minify_enabled("mpy")
     tmp = Path(tempfile.mkdtemp(prefix="deska_mpy_"))
     n, before, after = 0, 0, 0
     merged_src, merged = None, []
     main = PROJECT / MP_ENTRY
-    if level == "max" and MP_ENTRY in items and main.is_file():
-        merged_src, merged = mp_merge_program(main, [PROJECT, PROJECT / "lib"])
+    if level == "max" and MP_ENTRY in files and main.is_file():
+        merged_src, merged = mp_merge_program(main, [PROJECT / r for r in files])
     skip = {f.resolve() for f in merged}
+    staged = []
     try:
-        for item in items:
-            src = PROJECT / item
-            files = [src] if src.is_file() else [f for f in src.rglob("*")
-                                                 if f.is_file() and "__pycache__" not in f.parts]
-            for f in files:
-                if f.resolve() in skip:
-                    continue                    # je soucasti slouceneho main.py
-                rel = f.relative_to(PROJECT)
-                if merged_src is not None and f.resolve() == main.resolve():
-                    data = minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")
-                    n += 1 + len(merged)
-                    before += f.stat().st_size + sum(m.stat().st_size for m in merged)
+        for rel in files:
+            f = PROJECT / rel
+            if f.resolve() in skip:
+                continue                        # je soucasti slouceneho main.py
+            if merged_src is not None and f.resolve() == main.resolve():
+                data = minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")
+                n += 1 + len(merged)
+                before += f.stat().st_size + sum(m.stat().st_size for m in merged)
+                after += len(data)
+            else:
+                data = board_bytes(f, "mpy")
+                if should_minify(f, "mpy"):
+                    n += 1
+                    before += f.stat().st_size
                     after += len(data)
-                else:
-                    data = board_bytes(f, "mpy")
-                    if should_minify(f, "mpy"):
-                        n += 1
-                        before += f.stat().st_size
-                        after += len(data)
-                (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
-                (tmp / rel).write_bytes(data)
-        yield tmp, n, before, after, merged
+            dst = board_path(rel)
+            (tmp / dst).parent.mkdir(parents=True, exist_ok=True)
+            (tmp / dst).write_bytes(data)
+            staged.append(dst)
+        yield tmp, staged, n, before, after, merged
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -3167,33 +3550,33 @@ def mp_failure(text):
             "tips": MP_BUSY_TIPS, "detail": detail}
 
 
-def mp_copy(port, items):
-    """Nahraje soubory a slozky jednim spojenim mpremote (prikazy spojene '+')."""
-    minify = minify_enabled("mpy")
-    for item in items:
-        src = PROJECT / item
-        if not src.exists():
-            say(col("ERROR", "error") + f": Preskakuji (nenalezeno): {item}")
-            continue
-        # mpremote kopiruje soubory beze zmeny, BOM tedy jen ohlasime
-        # (se zmensenim se BOM odstrani v docasne kopii)
-        for f in ([src] if src.is_file() or minify else sorted(src.rglob("*.py"))):
-            if has_bom(f):
-                warn(f"{f.relative_to(PROJECT).as_posix()} je ulozeny jako 'UTF-8 with BOM' - "
-                     f"na desce skonci chybou NameError ({BOM_HELP}).")
-        say(("Nahravam slozku: " + col(item, "dir")) if src.is_dir() else ("Nahravam soubor: " + col(item, "file")))
-    flat = mp_is_flat(port)
-    with mp_stage(items) as (root, n_min, before, after, merged):
+def mp_layout_tips(profile):
+    return (f"co a proc se nahrava: .\\mpy files" + (" microbit" if profile == "microbit" else ""),
+            f"pravidla jsou v {rules_rel()}")
+
+
+def mp_copy(port, files):
+    """Nahraje soubory projektu (cesty od korene) jednim spojenim mpremote
+    (prikazy spojene '+'). Pouziva mpy setup."""
+    profile = mp_profile(port)
+    flat = profile == "microbit"
+    say(f"Pravidla: {rules_rel()} - {rule_sections_text(profile)}", "info")
+    for rel in files:
+        if has_bom(PROJECT / rel):
+            warn(f"{rel} je ulozeny jako 'UTF-8 with BOM' - na desku pujde bez BOM ({BOM_HELP}).")
+    problems = board_layout(files, profile)[1]
+    if problems:
+        raise CpyError("Soubory nejde nahrat:" + "".join("\n       - " + p for p in problems + list(mp_layout_tips(profile))))
+    with mp_stage(files) as (root, staged, n_min, before, after, merged):
         if merged:
             say(f"Slouceno do {MP_ENTRY}: " + ", ".join(m.name for m in merged) + " (mpy minify max)", "info")
         if n_min:
             say(f"Zmenseno {n_min} souboru: {fmt_size(before)} -> {fmt_size(after)} "
                 f"(mpy minify {minify_enabled('mpy')})", "info")
-        args, _count, skipped = mp_cp_plan(items, flat, root)
-        for s in skipped:
-            warn(f"Preskakuji {s}: micro:bit nema slozky (balicky na nem nefunguji).")
-        if not args:
-            raise CpyError("Neni co nahrat.")
+        if not staged:
+            raise CpyError("Neni co nahrat - pravidla vse vylucuji.\n       - " + mp_layout_tips(profile)[0])
+        say(f"Nahravam {len(staged)} souboru" + (" (micro:bit: vse do korene desky)" if flat else ""), "info")
+        args = mp_cp_plan(staged, flat)
         line()
         rc, last, fail = mp_run_cp(port, args, root, print,
                                    lambda n, f: warn(f"Pokus {n} selhal: {f['text']} - opakuji ({n}/{MP_RETRIES})"))
@@ -3201,46 +3584,57 @@ def mp_copy(port, items):
         raise CpyError(f"Nahravani selhalo: {fail['text']}." + "".join("\n       - " + t for t in fail["tips"]))
 
 
-def mp_upload_files(opts, items, title, source):
-    """Spolecny postup pro 'mpy upload' a 'mpy main' s podrobnym vypisem."""
+def mp_upload_files(opts, title, only=None):
+    """Spolecny postup pro 'mpy upload' a 'mpy main' s podrobnym vypisem.
+    only = jen tyto soubory (mpy main), jinak cely projekt podle upload.toml.
+    Deska se hleda jako prvni - podle ni se vyberou pravidla (micro:bit, Pico)."""
     st = Steps(title)
 
-    # 1) Co se nahrava
-    st.head("Co se nahrava")
-    st.info("seznam:", source)
-    mp_files = []
-    for item in items:
-        src = PROJECT / item
-        mp_files += [src] if src.is_file() else sorted(src.rglob("*.py")) if src.is_dir() else []
-    git_conflict_step(st, mp_files)
-    minify_report(st, "mpy", mp_files)
-    existing, total_files = [], 0
-    for item in items:
-        src = PROJECT / item
-        if not src.exists():
-            st.info("CHYBI:", f"{item} - v projektu neexistuje, preskakuji", "error")
-            continue
-        if src.is_dir():
-            files = [f for f in src.rglob("*") if f.is_file()]
-            st.info("slozka:", f"{item}/ ({len(files)} souboru, {fmt_size(sum(f.stat().st_size for f in files))})")
-        else:
-            files = [src]
-            st.info("soubor:", f"{item} ({src.stat().st_size} B)")
-        for f in files:
-            if has_bom(f):
-                st.info("pozor:", f"{f.relative_to(PROJECT).as_posix()} ma BOM - na desce skonci chybou "
-                        f"NameError ({BOM_HELP})", "warn")
-        existing.append(item)
-        total_files += len(files)
-    if not existing:
-        st.fail("neni co nahrat - zadna polozka neexistuje.", f"zkontroluj {source}")
-
-    # 2) Deska
+    # 1) Deska (podle ni se vyberou pravidla)
     port = mp_ready_port(opts, st)
+    profile = mp_profile(port)
+    flat = profile == "microbit"
+
+    # 2) Co se nahrava
+    st.head("Co se nahrava")
+    if only:
+        files = [r for r in only if (PROJECT / r).is_file()]
+        st.info("seznam:", "jen " + ", ".join(only))
+        if not files:
+            st.fail(f"{only[0]} v projektu neexistuje.")
+    else:
+        files, skipped = project_walk(profile)
+        st.info("pravidla:", f"{rules_rel()} - {rule_sections_text(profile)}")
+        if skipped:
+            st.info("vynechano:", f"{len(skipped)} polozek (co a proc: .\\mpy files"
+                    + (" microbit" if flat else "") + ")")
+        if (PROJECT / MP_ENTRY).is_file() and MP_ENTRY not in files:
+            st.info("pozor:", f"{MP_ENTRY} pravidla vylucuji - nenahraje se", "warn")
+    paths = [PROJECT / r for r in files]
+    git_conflict_step(st, paths)
+    minify_report(st, "mpy", paths)
+    groups = {}
+    for rel in files:
+        if "/" in rel:
+            groups.setdefault(rel.split("/")[0], []).append(PROJECT / rel)
+    for d, fs in sorted(groups.items()):
+        target = board_path(d + "/x").rsplit("/", 1)[0]
+        st.info("slozka:", f"{d}/ ({len(fs)} souboru, {fmt_size(sum(f.stat().st_size for f in fs))})"
+                + (f" -> na desce {target}/" if target != d else ""))
+    for rel in files:
+        if "/" not in rel:
+            st.info("soubor:", f"{rel} ({(PROJECT / rel).stat().st_size} B)")
+    for f in paths:
+        if has_bom(f):
+            st.info("pozor:", f"{f.relative_to(PROJECT).as_posix()} ma BOM - na desku pujde bez nej", "warn")
+    if not files:
+        st.fail("neni co nahrat - pravidla vse vylucuji.", *mp_layout_tips(profile))
+    problems = board_layout(files, profile)[1]
+    if problems:
+        st.fail("tyto soubory nejde na desku nahrat.", *problems, *mp_layout_tips(profile))
 
     # 3) Nahravani pres mpremote (vsechno jednim spojenim, prikazy spojene '+')
     st.head("Nahravani (mpremote)")
-    flat = mp_is_flat(port)
     if flat:
         st.info("micro:bit:", "nema slozky - soubory jdou primo do korene desky")
     t0 = time.monotonic()
@@ -3262,38 +3656,38 @@ def mp_upload_files(opts, items, title, source):
             st.info("", fail["detail"], "warn")
         st.info("opakuji:", f"pokus {n + 1} z {MP_RETRIES + 1} (nezmenene soubory se preskoci)", "warn")
 
-    with mp_stage(existing) as (root, n_min, before, after, merged):
+    with mp_stage(files) as (root, staged, n_min, before, after, merged):
         if merged:
             st.info("slouceni:", f"do {MP_ENTRY}: " + ", ".join(m.name for m in merged)
                     + " - na desku jde jen sloucene main.py (chyby ukazi zmenena jmena a radky)", "warn")
         if n_min:
             st.info("zmenseno:", f"{n_min} souboru {fmt_size(before)} -> {fmt_size(after)} "
                     f"(usetreno {fmt_size(before - after)})")
-        args, total_files, skipped = mp_cp_plan(existing, flat, root)
-        for s in skipped:
-            st.info("preskoceno:", f"{s} - micro:bit nema slozky, balicky na nem nefunguji", "warn")
-        if not args:
-            st.fail("neni co nahrat.", f"zkontroluj {source}")
+        if flat:
+            used = microbit_used([(f, (root / f).stat().st_size) for f in staged])
+            st.info("misto:", f"projekt zabere asi {fmt_size(used)} z asi {fmt_size(MICROBIT_V2_FS_SIZE)} "
+                    "(micro:bit v2)")
+            if used > MICROBIT_V2_FS_SIZE:
+                st.fail("projekt se na micro:bit nevejde.", *MP_NOSPACE_TIPS)
+        args = mp_cp_plan(staged, flat)
         st.info("prikaz:", "mpremote connect " + port + " " + " ".join(args))
         rc, last, fail = mp_run_cp(port, args, root, on_row, on_retry)
     if rc != 0:
         st.fail(f"{fail['text']} (mpremote, kod {rc}).", *last, *fail["tips"])
-    copied = max(0, total_files - counts["up"])
+    copied = max(0, len(staged) - counts["up"])
     st.info("vysledek:", f"OK za {time.monotonic() - t0:.1f} s - nahrano {copied}, beze zmeny {counts['up']}")
     st.done("Hotovo. MicroPython program po nahrani SAM NESPUSTI - spust ho tlacitkem "
             "'Spustit main.py' nebo .\\mpy reset.")
 
 
 def mp_upload(opts):
-    """mpy upload: nahraje polozky z upload_config.txt."""
-    mp_upload_files(opts, mp_upload_items(), "Nahrani projektu na desku s MicroPythonem",
-                    UPLOAD_CONFIG.relative_to(PROJECT).as_posix())
+    """mpy upload: nahraje projekt podle .vscode/upload.toml."""
+    mp_upload_files(opts, "Nahrani projektu na desku s MicroPythonem")
 
 
 def mp_main(opts):
     """mpy main: nahraje jen main.py."""
-    mp_upload_files(opts, [MP_ENTRY], f"Nahrani {MP_ENTRY} na desku s MicroPythonem",
-                    f"jen {MP_ENTRY} (prikaz mpy main)")
+    mp_upload_files(opts, f"Nahrani {MP_ENTRY} na desku s MicroPythonem", only=[MP_ENTRY])
 
 
 def mp_runmain(opts):
@@ -3549,7 +3943,7 @@ def mp_setup(opts):
     say("")
     say("KROK 2/3: nahravani projektu", "info")
     line()
-    mp_copy(port, mp_upload_items())
+    mp_copy(port, project_files(mp_profile(port)))
     say("")
     say("KROK 3/3: obsah desky", "info")
     line()
@@ -3820,14 +4214,11 @@ def minify_cmd(tool, opts):
         warn("Chybi knihovna python-minifier - nahravani se zapnutym zmensenim skonci chybou.\n"
              f"       {SETUP_HINT}\n       (rucne: {pip_cmd('python-minifier')})")
         return 1 if level else 0
+    profile = mp_guess_profile(opts) if tool == "mpy" else "cpy"
+    files = [PROJECT / r for r in project_files(profile)]
+    files = [f for f in files if f.suffix.lower() == ".py"]
     if tool == "mpy":
-        files = []
-        for item in mp_upload_items():
-            src = PROJECT / item
-            files += [src] if src.is_file() else [f for f in src.rglob("*.py")] if src.is_dir() else []
-    else:
-        files = [PROJECT / r for r in project_files()]
-    files = [f for f in files if f.suffix.lower() == ".py" and "__pycache__" not in f.parts]
+        say(f"   soubory podle pravidel {rule_sections_text(profile)} ({PROFILE_NAMES[profile]})")
     if not files:
         say("   v tomto projektu neni zadny .py soubor k nahrani.")
         return 0
@@ -3841,7 +4232,7 @@ def minify_cmd(tool, opts):
     main = PROJECT / MP_ENTRY
     if tool == "mpy" and main in files:
         try:
-            merged_src, merged = mp_merge_program(main, [PROJECT, PROJECT / "lib"])
+            merged_src, merged = mp_merge_program(main, files)
             gone = {m.resolve() for m in merged} | {main.resolve()}
             total = len(minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")) + sum(
                 size(f, "full") for f in files if f.resolve() not in gone)
@@ -3871,6 +4262,59 @@ def mp_minify(opts):
     return minify_cmd("mpy", opts)
 
 
+def files_cmd(tool, opts):
+    """mpy|cpy files: co se z projektu nahraje na desku a proc se co vynecha
+    (podle .vscode/upload.toml). Na desku nesaha. U mpy plati pravidla
+    pripojene desky; jinou desku zvolis: mpy files pico | microbit | mpy."""
+    if tool == "cpy":
+        profile = "cpy"
+    elif opts.args:
+        profile = opts.args[0].lower()
+        if profile not in ("pico", "microbit", "mpy"):
+            raise CpyError("Pouziti: mpy files [pico | microbit | mpy]")
+    else:
+        profile = mp_guess_profile(opts)
+    files, skipped = project_walk(profile)
+    layout, problems = board_layout(files, profile)
+    say(f"Pravidla: {rules_rel()} - {rule_sections_text(profile)}  ({PROFILE_NAMES[profile]})", "info")
+    if tool == "mpy" and not opts.args:
+        say("   (pro jinou desku: .\\mpy files pico | microbit | mpy)")
+    say("   soubor se nahraje, kdyz je povoleny (enable) a neni zakazany (disable); zakaz vyhrava")
+    line()
+    total = sum((PROJECT / r).stat().st_size for r in files)
+    say(f"Nahraje se ({len(files)} souboru, {fmt_size(total)}):", "info")
+    for rel in files:
+        dst = layout[rel]
+        say(f"   {col(rel, 'file')}" + (f" -> {dst}" if dst != rel else "")
+            + f"  ({(PROJECT / rel).stat().st_size} B)  - {upload_check(rel, profile)[1]}")
+    if not files:
+        say("   nic")
+    say(f"Vynecha se ({len(skipped)}):", "info")
+    for rel, why in skipped:
+        say(f"   {col(rel, 'dir' if rel.endswith('/') else 'size')}  - {why}")
+    if profile == "microbit" and files:
+        used = microbit_used([(layout[r].split("/")[-1], len(board_bytes(PROJECT / r, "mpy"))) for r in files])
+        line()
+        say(f"micro:bit: projekt zabere asi {fmt_size(used)} z asi {fmt_size(MICROBIT_V2_FS_SIZE)}"
+            + (" (se zmensenim " + minify_enabled("mpy") + ")" if minify_enabled("mpy") else ""), "info")
+    if problems:
+        line()
+        for p in problems:
+            warn(p)
+        return 1
+    return 0
+
+
+def cp_files(board, opts):
+    """cpy files: co se z projektu nahraje na desku (podle .vscode/upload.toml)."""
+    return files_cmd("cpy", opts)
+
+
+def mp_files(opts):
+    """mpy files [pico|microbit|mpy]: co se z projektu nahraje na desku."""
+    return files_cmd("mpy", opts)
+
+
 # ============================================================
 # ODDIL 9  Napoveda, cteni parametru a hlavni funkce
 # ============================================================
@@ -3887,8 +4331,9 @@ Kratce:  .\\mpy help   .\\cpy help   (Windows PowerShell)
 
 HELP_MPY = """Pouziti: mpy <prikaz> [volby]          (v PowerShellu: .\\mpy <prikaz>)
 
-  upload                nahraje soubory a slozky z .vscode/upload_config.txt
+  upload                nahraje projekt na desku (co se nahrava: .vscode/upload.toml)
   main                  nahraje jen main.py
+  files [pico|microbit] co se z projektu nahraje a proc se co vynecha (bez desky)
   runmain [soubor]      spusti main.py (nebo jiny soubor) z RAM bez zapisu na desku
   repl                  interaktivni konzole Pythonu na desce   (konec: Ctrl+])
   list                  stromovy vypis souboru na desce
@@ -3918,8 +4363,9 @@ HELP_CPY = """Pouziti: cpy <prikaz> [volby]          (v PowerShellu: .\\cpy <pri
 
 Stejne prikazy jako mpy:
   upload [--all]        nahraje projekt na disk CIRCUITPY (jen zmenene soubory, --all = vse);
-                        co se nahrava, urcuje .vscode/.ignoreCopy
+                        co se nahrava, urcuje .vscode/upload.toml (prehled: cpy files)
   main [--all]          nahraje jen code.py   (alias: code)
+  files                 co se z projektu nahraje a proc se co vynecha (bez desky)
   runmain [soubor]      spusti code.py (nebo jiny soubor) z RAM bez zapisu na disk
   repl                  interaktivni konzole Pythonu na desce   (konec: Ctrl+])
   list                  stromovy vypis obsahu desky
@@ -3990,6 +4436,7 @@ CPY_COMMANDS = {
     "flash": (cp_flash, set()),
     "select": (cp_select, set()),
     "minify": (cp_minify, set()),
+    "files": (cp_files, set()),
     "sim": (cp_sim, set()),
     "test": (cp_test, set()),
 }
@@ -4008,6 +4455,7 @@ MPY_COMMANDS = {
     "plot": (mp_plot, {"seconds"}),
     "select": (mp_select, set()),
     "minify": (mp_minify, set()),
+    "files": (mp_files, set()),
     "sim": (mp_sim, {"pico"}),
     "test": (mp_test, set()),
 }

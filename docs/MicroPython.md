@@ -17,7 +17,7 @@ V rámci výuky a tohoto projektu je **MicroPython** určen pro následující h
 
 > [!IMPORTANT]
 > **BBC micro:bit** má jiný MicroPython než ostatní desky:
-> - **Nemá složky.** `mpy upload` nahraje soubory ze složky `lib/` přímo do kořene desky a podsložky (balíčky jako `lib/picoed_v2_lib/`) přeskočí – vypíše to jako `preskoceno`. Vlastní moduly pro micro:bit dávejte jako soubory přímo do `lib/` (např. `lib/robot.py`).
+> - **Nemá složky.** Knihovny ze složek (`lib/`, `lib_mpy/`) se na něj nenahrávají. Vlastní moduly pro micro:bit dávejte jako soubory přímo do kořene projektu, vedle `main.py` (např. `robot.py`).
 > - **Je starší** (micro:bit v2: MicroPython 1.15) a nezná **f-řetězce** (`f"..."`), ty umí až verze 1.17. Program s nimi skončí hned po spuštění chybou `SyntaxError`. Texty skládejte pomocí `+`: `print("Vzdalenost: " + str(cm))`.
 > - Nemá moduly `json`, `re`, `hashlib` a další; místo `machine.Pin` se používá modul `microbit` (`pin0`, `display`, `button_a`).
 > - **Úložiště má jen asi 20 kB.** Větší knihovny zmenšete při nahrávání: `mpy minify simple` (nebo `full`).
@@ -51,7 +51,7 @@ Výchozí kód je navržen tak, aby po nahrání na desku okamžitě poskytl **v
 
 ### Co všechno `main.py` umí a jak ho rozšířit pro robota:
 
-Díky připraveným knihovnám v adresáři `lib/picoed_v2_lib/` můžete v `main.py` snadno ovládat veškeré periferie robota:
+Díky připraveným knihovnám v adresáři `lib_mpy/picoed_v2_lib/` můžete v `main.py` snadno ovládat veškeré periferie robota:
 
 #### A) Ovládání LED maticového displeje (`Display`)
 - **Rolování textu:** `display.scroll("Start zavodu")`
@@ -139,7 +139,7 @@ Když žádná deska té platformy připojená není, je blok ztlumený (tlačí
 
 | Tlačítko | Co udělá |
 |---|---|
-| **⬆ Nahrát projekt** *(žluté)* | nahraje soubory podle `upload_config.txt` na desku (`mpy upload`) |
+| **⬆ Nahrát projekt** *(žluté)* | nahraje projekt na desku podle pravidel v `.vscode/upload.toml` (`mpy upload`) |
 | **▶ Spustit main.py** *(zelené)* | restartuje desku, takže se spustí nahraný `main.py` (`mpy reset`) |
 | **⌨ Konzole (REPL)** *(modré)* | otevře interaktivní Python konzoli na desce (`mpy repl`) |
 | **🗑 Smazat desku** *(červené)* | smaže všechny soubory na desce – VS Code se nejdřív zeptá v dialogu (`mpy wipe`) |
@@ -181,7 +181,7 @@ ERROR: v kroku 2 - port COM4 je obsazeny jinym programem.
 # Zobrazení nápovědy
 mpy help
 
-# 1. Nahrání celého projektu podle upload_config.txt
+# 1. Nahrání celého projektu podle pravidel v .vscode/upload.toml
 #    (nezměněné soubory mpremote přeskočí - vypíše "Up to date")
 mpy upload
 
@@ -223,6 +223,10 @@ mpy select
 # 13. Zmenšení souborů při nahrávání (off / simple / full / max) - šetří místo na micro:bitu
 #     (minify exclude lib/robot.py = tento soubor nezmenšovat; podrobně viz MicroBit.md)
 mpy minify simple
+
+# 14. Co se z projektu nahraje na desku a proč se co vynechá (bez desky;
+#     pro jinou desku: mpy files pico | microbit)
+mpy files
 ```
 
 > [!IMPORTANT]
@@ -283,15 +287,19 @@ Jak nástroj funguje uvnitř, popisuje **[Nastroje.md](Nastroje.md)**.
 
 ---
 
-## 7. Konfigurace nahrávání (`upload_config.txt`)
+## 7. Co se nahrává na desku (`.vscode/upload.toml`)
 
-Soubor `.vscode/upload_config.txt` definuje položky přenášené příkazem `upload`:
-```text
-# Seznam souborů a adresářů k uploadu na MicroPython zařízení
-main.py
-lib
-```
-Chcete-li do robota nahrát další modul (např. `motory.py` nebo `nastaveni.json`), přidejte jeho název na nový řádek.
+`mpy upload` nahraje **všechny soubory z kořene projektu** (`main.py`, vaše moduly, data) a podle desky i knihovny:
+
+| Deska | Knihovny | Na desce |
+|---|---|---|
+| Raspberry Pi Pico, Pico:ed s MicroPythonem | `lib/` (společné) a `lib_mpy/` (jen MicroPython) | obě v jedné složce `/lib` |
+| BBC micro:bit | žádné – micro:bit nemá složky | moduly patří do kořene projektu |
+
+Nový modul (např. `motory.py` nebo `nastaveni.json`) stačí uložit do kořene projektu – nikam ho zapisovat nemusíte. Nenahrává se `code.py` a `settings.toml` (CircuitPython), složka `lib_cpy/`, ostatní podsložky (`pc/`, `docs/`, …) a dokumentace a spouštěče (`*.md`, `*.cmd`, …).
+
+- Co a proč se nahraje, ukáže bez desky **`.\mpy files`** (pro jinou desku `.\mpy files microbit` nebo `pico`).
+- Pravidla jsou v souboru `.vscode/upload.toml`; podrobně viz [Nastroje.md](Nastroje.md#6-co-se-nahrává-vscodeuploadtoml).
 
 ---
 
@@ -306,7 +314,7 @@ Program jde vyzkoušet i bez desky. Moduly MicroPythonu (`machine`, `time`, `mic
 
 V panelu jsou to tlačítka **▶ Simulace main.py** a **✓ Testy main.py** (blok **Na PC bez desky**). Na Linuxu a macOS: `./mpy.sh sim`, `./mpy.sh test`.
 
-Falešný `machine` (`pc/_fake/machine.py`) simuluje desku **Pico:ed v2**: displej s čipem IS31FL3731 na I2C (adresa `0x74`), tlačítka A / B (GP20 / GP21), LED (GP25) a bzučák (GP3). Knihovna `lib/picoed_v2_lib` běží beze změny, takže `main.py` desku pozná stejně jako na robotovi. `.\mpy sim --pico` simuluje **Raspberry Pi Pico** (jen LED).
+Falešný `machine` (`pc/_fake/machine.py`) simuluje desku **Pico:ed v2**: displej s čipem IS31FL3731 na I2C (adresa `0x74`), tlačítka A / B (GP20 / GP21), LED (GP25) a bzučák (GP3). Knihovna `lib_mpy/picoed_v2_lib` běží beze změny, takže `main.py` desku pozná stejně jako na robotovi. `.\mpy sim --pico` simuluje **Raspberry Pi Pico** (jen LED).
 
 ```text
 Spusteno main.py na desce: ELECFREAKS Pico:ed v2
@@ -333,7 +341,7 @@ Nesimuluje se: BBC micro:bit (modul `microbit`), `rp2` (PIO), `network`, UART, S
 | **Deska zamrzla v nekonečném cyklu while True** | Smyčka běží bez `time.sleep()`, mikrokontrolér nestíhá obsluhu USB. | Otevřete REPL a stiskněte opakovaně `Ctrl+C`. Poté spusťte `mpy wipe`. |
 | **`ERROR: Chybi knihovna mpremote`** | Knihovny nejsou ve virtuálním prostředí `.venv` projektu (setup ještě neproběhl, nebo se `.venv` smazalo). | Spusťte znovu `setup.bat` (nebo `./setup.sh`), který prostředí zkontroluje a nastaví. |
 | **Linux/macOS: `./setup.sh` hlásí `Permission denied`** | Skript nemá příznak spustitelnosti (projekt rozbalený na Windows, na flashce nebo disku s FAT/NTFS). | Spusťte ho jako `bash setup.sh`. Setup pak opraví i spouštěče `cpy.sh` a `mpy.sh`. |
-| **`NameError: name '\ufeff...' isn't defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `mpy upload` na to upozorní. Ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8` a nahrajte znovu. |
+| **`NameError: name '\ufeff...' isn't defined` na 1. řádku** | Soubor je uložený jako „UTF-8 with BOM“ (neviditelná značka na začátku, přidává ji např. Poznámkový blok). | `mpy upload` na to upozorní a na desku pošle soubor bez BOM. Natrvalo: ve VS Code klikněte vpravo dole na `UTF-8 with BOM` → `Save with Encoding` → `UTF-8` a nahrajte znovu. |
 | **Po nahrání se nic neděje** | MicroPython po nahrání program nespouští. | Spusťte ho: `mpy reset` (nebo tlačítko RESET). |
 | **micro:bit: `SyntaxError: invalid syntax` hned po spuštění** | V programu je f-řetězec (`f"..."`) nebo jiná novinka, kterou starší MicroPython na micro:bitu nezná. | Texty skládejte pomocí `+` a `str()`. Řádek s chybou ukáže `mpy reset`. |
 | **`na desce doslo misto v ulozisti` (`No space left on device`)** | micro:bit má úložiště jen asi 20 kB. | `mpy list` ukáže, co na desce je; zapněte `mpy minify simple` (nebo `full`); před nahráním `mpy wipe`. Viz [MicroBit.md](MicroBit.md). |

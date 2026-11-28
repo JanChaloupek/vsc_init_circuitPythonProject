@@ -3,7 +3,7 @@ r"""Ukazkovy test: vychozi program main.py (MicroPython) na falesnem hardwaru.
 Spusteni:  .\mpy test   (Linux/macOS: ./mpy.sh test)
 
 Test bezi na PC. Modul machine (Pin, I2C, PWM, Timer) je falesny (pc/_fake)
-a simuluje desku Pico:ed v2. Knihovna lib/picoed_v2_lib bezi beze zmeny
+a simuluje desku Pico:ed v2. Knihovna lib_mpy/picoed_v2_lib bezi beze zmeny
 nad nim. Cas v testu sam neplyne - time.sleep() ho jen posune.
 
 Pomocne funkce falesneho machine (na desce nejsou):

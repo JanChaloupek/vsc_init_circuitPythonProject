@@ -36,7 +36,7 @@ Program jde vyzkoušet i bez robota. Moduly desky se nahradí falešnými verzem
 |---|---|
 | **`.\cpy sim`** | spustí `code.py` (nebo jiný soubor: `.\cpy sim muj.py`) na PC. Čas běží skutečně a konzole vypisuje, co by dělal hardware: LED, text a obrázek na displeji, bzučák, NeoPixel. Klávesy `a` / `b` stisknou tlačítko A / B, `q` nebo `Ctrl+C` simulaci ukončí. |
 | **`.\cpy test`** | spustí unit testy programu `code.py` z `pc/tests` (jen některé: `.\cpy test test_code`). Čas v testu sám neplyne – `time.sleep(5)` ho jen posune o 5 s – a test na konci kontroluje, co se s hardwarem dělo (např. `picoed.led.state_history`). |
-| **`.\mpy sim`** | totéž pro `main.py` (MicroPython). Falešný modul `machine` simuluje desku Pico:ed v2 (displej, tlačítka A / B, LED, bzučák) a knihovna `lib/picoed_v2_lib` běží beze změny. `.\mpy sim --pico` simuluje Raspberry Pi Pico. |
+| **`.\mpy sim`** | totéž pro `main.py` (MicroPython). Falešný modul `machine` simuluje desku Pico:ed v2 (displej, tlačítka A / B, LED, bzučák) a knihovna `lib_mpy/picoed_v2_lib` běží beze změny. `.\mpy sim --pico` simuluje Raspberry Pi Pico. |
 | **`.\mpy test`** | unit testy programu `main.py` ze složky `pc/tests_mpy` (falešný `machine` má pro testy pomocné funkce, např. `machine.stiskni("a")`, `machine.historie(25)`). |
 
 Simulace i testy používají **stejný falešný hardware** – co ukazuje simulace, to ověřují testy. Na Linuxu a macOS: `./cpy.sh sim`, `./mpy.sh sim`, … Podrobnosti: [docs/Nastroje.md](docs/Nastroje.md#10-simulace-a-testy-na-pc-složka-pc).
@@ -48,11 +48,13 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 | **`code.py`** | výchozí program pro **CircuitPython** (blikání LED, nápis na displeji) |
 | **`main.py`** | výchozí program pro **MicroPython** |
 | **`docs/`** | podrobné návody: `CircuitPython.md`, `MicroPython.md`, `MicroBit.md`, `Nastroje.md` (na desku se nenahrávají) |
-| **`lib/`** | knihovny pro desku; `picoed_v2_lib/` je knihovna pro Pico:ed v2 s MicroPythonem (displej, tlačítka, LED, bzučák, ultrazvuk) |
+| **`lib/`** | společné knihovny pro CircuitPython i MicroPython (na desce ve složce `/lib`) – popis všech tří složek je v [lib/README.md](lib/README.md) |
+| **`lib_cpy/`** | knihovny jen pro CircuitPython (na desce také `/lib`) |
+| **`lib_mpy/`** | knihovny jen pro MicroPython na Picu / Pico:edu (na desce `/lib`); `picoed_v2_lib/` je knihovna pro Pico:ed v2 (displej, tlačítka, LED, bzučák, ultrazvuk). Na BBC micro:bit se knihovny ze složek nenahrávají. |
 | **`setup.bat`** / **`setup.sh`** | jednorázová příprava prostředí (spustí `.vscode/setup.ps1` / `.vscode/setup.sh`) |
 | **`mpy.cmd`** / **`mpy.sh`** | spouštěč nástroje **`mpy`** pro MicroPython |
 | **`cpy.cmd`** / **`cpy.sh`** | spouštěč nástroje **`cpy`** pro CircuitPython |
-| **`pyrightconfig.json`** | nastavení nápovědy Pylance: kde hledat knihovny (`lib/`) a typové stuby (`pc/_stubs`) |
+| **`pyrightconfig.json`** | nastavení nápovědy Pylance: kde hledat knihovny (`lib/`, `lib_cpy/`, `lib_mpy/`) a typové stuby (`pc/_stubs`) |
 | **`pc/`** | všechno, co běží **jen na počítači** (na desku se nenahrává): falešný hardware `pc/_fake`, nápověda pro editor `pc/_stubs`, testy `pc/tests` (CircuitPython) a `pc/tests_mpy` (MicroPython) a simulace `pc/simulace` – viz [Simulace a testy na PC](#simulace-a-testy-na-pc-bez-desky) |
 | **`.gitignore`** | co se neukládá do gitu |
 | **`.venv/`** | Python knihovny projektu (`mpremote`, `python-minifier`, `matplotlib`). Vytvoří ho `setup.bat` / `setup.sh`; neukládá se do gitu a nenahrává se na desku. |
@@ -65,8 +67,8 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 | **`setup.ps1`** / **`setup.sh`** | instalace Pythonu (Windows), virtuální prostředí `.venv` s knihovnami `mpremote`, `python-minifier` a `matplotlib`, rozšíření VS Code; nastavení panelu a Run on Save |
 | **`settings.json`** | nastavení editoru, tlačítek panelu a Run on Save (tlačítka a Run on Save zapisuje `deska.py vscode`) |
 | **`extensions.json`** | doporučená rozšíření VS Code |
-| **`.ignoreCopy`** | co se **nenahrává** na CircuitPython desku (pro `Ctrl+S` i `cpy upload`) |
-| **`upload_config.txt`** | co se **nahrává** na MicroPython desku (`mpy upload`) |
+| **`upload.toml`** | **co se nahrává na desku** – pro CircuitPython (`Ctrl+S`, `cpy upload`) i MicroPython (`mpy upload`); přehled bez desky: `.\cpy files`, `.\mpy files` |
+| **`tests/`** | testy nástroje `deska.py` pro správce šablony (studenti je nepotřebují) |
 | **`dist/micropython-panel.vsix`** | rozšíření s tlačítky v postranním panelu a ve stavovém řádku |
 
 Dřívější samostatné skripty (`copy.ps1`, `copy.sh`, `upload.ps1`, `list.ps1`, `wipe.ps1`, `repl.ps1`, `utils.ps1`, `ploter.py`, `comStop.py`, ... – celkem 23 souborů) nahradil soubor `deska.py`. Odpovídající příkazy:
