@@ -220,6 +220,8 @@ Spusteno main.py na desce: BBC micro:bit
 
 Klávesy: `a` / `b` = tlačítko A / B, `l` = dotyk loga, `q` nebo `Ctrl+C` = konec.
 
+Našeptávání v editoru (Pylance) zná moduly `microbit`, `music` a `radio` z typových definic `pc/_stubs/*.pyi` – u `display.`, `pin0.` nebo `music.play(` ukáže metody a jejich popis česky.
+
 Simulace se chová jako deska i v tom, co micro:bit **nemá**: knihovny ze složek `lib/` a `lib_mpy/` nejsou k dispozici a `from machine import Pin` skončí chybou. Čekání (`sleep`) i rolování textu trvají přibližně jako na desce a `sleep(0.5)` nečeká vůbec – bere milisekundy, stejně jako na desce.
 
 Na co simulace nepřijde:

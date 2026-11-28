@@ -339,7 +339,7 @@ Testy běží na Pico:ed v2. Test pro micro:bit si desku vybere v `setUp` (`nast
 
 Nesimuluje se: `rp2` (PIO), `network`, na Picu UART, SPI a NeoPixel; na micro:bitu tvary písmen na displeji, `speech`, `power` a `log`.
 
-- Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`.
+- Složka **`pc/_stubs`** spolu s `pyrightconfig.json` v kořeni projektu poskytuje kompletní našeptávání metod a typovou kontrolu (Pylance), např. pro `machine` a `rp2`, na micro:bitu pro `microbit`, `music` a `radio`.
 
 ---
 

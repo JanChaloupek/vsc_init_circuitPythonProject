@@ -1,12 +1,12 @@
 """
-machine – MicroPython API pro hardware RP2040 (pico:ed)
+machine – MicroPython API pro hardware (RP2040 / Pico:ed, BBC micro:bit)
 
 Tento soubor je STUB (typový popis) určený pro VS Code a Pylance.
 Slouží pouze pro doplňování kódu a statickou analýzu. Neobsahuje
 žádnou skutečnou implementaci.
 
-MicroPython na RP2040 poskytuje modul `machine`, který zpřístupňuje
-nízkoúrovňové funkce mikrokontroleru:
+MicroPython na RP2040 (Raspberry Pi Pico, Pico:ed) poskytuje modul
+`machine`, který zpřístupňuje nízkoúrovňové funkce mikrokontroleru:
 
     - Pin: digitální vstupy/výstupy
     - I2C / SoftI2C: komunikace po sběrnici I2C
@@ -15,11 +15,15 @@ nízkoúrovňové funkce mikrokontroleru:
     - UART: sériová komunikace
     - Timer: hardwarové časovače (běží v ISR)
     - ADC: analogově-digitální převodník
-    - reset(), freq(): systémové funkce
+    - reset(), freq(), time_pulse_us(), unique_id(): systémové funkce
     - mem32/mem16/mem8: přímý přístup do paměti
 
-CircuitPython tento modul NEOBSAHUJE, proto je nutné mít vlastní
-stubs, aby projekt na pico:ed fungoval správně ve VS Code.
+Na BBC micro:bitu je `machine` malý: jen reset(), freq(), time_pulse_us(),
+unique_id() a mem8/mem16/mem32. Třídy Pin, I2C, SPI, PWM, UART, Timer a ADC
+tam NEJSOU - piny, sběrnice a PWM jsou v modulu microbit (pin0, i2c,
+pin0.write_analog). `from machine import Pin` na micro:bitu skončí chybou.
+
+CircuitPython tento modul NEOBSAHUJE (místo něj board, digitalio, busio, pwmio).
 """
 
 from typing import Any, Callable, Optional, Union
@@ -28,6 +32,8 @@ from typing import Any, Callable, Optional, Union
 class Pin:
     """
     Pin – digitální vstup nebo výstup.
+
+    Na BBC micro:bitu není (piny jsou v modulu microbit: pin0, pin1, ...).
 
     Používá se pro ovládání LED, čtení tlačítek, řízení motorů
     a další základní práci s GPIO.
@@ -81,6 +87,8 @@ class I2C:
     """
     I2C – hardwarová komunikace po sběrnici I2C.
 
+    Na BBC micro:bitu není (použijte microbit.i2c).
+
     Používá se pro senzory, displeje, expandéry a další periferie.
     """
 
@@ -122,6 +130,8 @@ class SPI:
     """
     SPI – rychlá sériová komunikace.
 
+    Na BBC micro:bitu není (použijte microbit.spi).
+
     Používá se pro displeje, paměti, převodníky a další rychlé periferie.
     """
 
@@ -161,6 +171,8 @@ class PWM:
     """
     PWM – pulzně šířková modulace.
 
+    Na BBC micro:bitu není (použijte pin0.write_analog).
+
     Používá se pro řízení jasu LED, rychlosti motorů a serv.
     """
 
@@ -197,6 +209,8 @@ class UART:
     """
     UART – sériová komunikace.
 
+    Na BBC micro:bitu není (použijte microbit.uart).
+
     Používá se pro GPS moduly, Bluetooth moduly, debug výstup atd.
     """
 
@@ -217,6 +231,8 @@ class UART:
 class Timer:
     """
     Timer – hardwarový časovač.
+
+    Na BBC micro:bitu není (časování přes microbit.running_time() nebo time.ticks_ms()).
 
     Používá se pro periodické úlohy, animace, měření času atd.
     """
@@ -248,6 +264,8 @@ class ADC:
     """
     ADC – analogově-digitální převodník.
 
+    Na BBC micro:bitu není (použijte pin0.read_analog).
+
     Používá se pro čtení senzorů (světlo, potenciometr, napětí).
     """
 
@@ -267,6 +285,28 @@ def reset() -> None:
 
 def freq() -> int:
     """Vrací frekvenci CPU v Hz."""
+    ...
+
+
+def time_pulse_us(pin: Any, pulse_level: int, timeout_us: int = 1000000) -> int:
+    """
+    Změří délku pulzu na pinu v mikrosekundách (např. ozvěna ultrazvukového senzoru).
+
+    Je i na BBC micro:bitu - tam se předává pin z modulu microbit (pin2).
+
+    Args:
+        pin: pin, na kterém se pulz měří.
+        pulse_level: úroveň pulzu - 1 = měří se, jak dlouho je pin v 1.
+        timeout_us: jak dlouho nejvýš čekat.
+
+    Returns:
+        Délka pulzu v µs; -2 = pulz nezačal, -1 = pulz neskončil (vypršel čas).
+    """
+    ...
+
+
+def unique_id() -> bytes:
+    """Vrací jedinečné sériové číslo čipu."""
     ...
 
 

@@ -13,6 +13,16 @@ V této verzi:
 
 Reálný modul `neopixel` je součástí CircuitPythonu a není dostupný na PC.
 Tento soubor slouží pro výuku, vývoj a testování.
+
+Modul `neopixel` má i MicroPython na BBC micro:bitu, s menším API:
+
+    NeoPixel(pin16, 4)        pin z modulu microbit, počet LED (bpp jako 3. parametr)
+    np[0] = (255, 0, 0)       barva jedné LED
+    np.show()                 zobrazí barvy (auto_write tam není - show() je nutné)
+    np.clear()                zhasne všechny LED (jen micro:bit)
+    np.fill((0, 0, 255))      všechny LED stejnou barvou
+
+brightness, auto_write, pixel_order a deinit() jsou jen v CircuitPythonu.
 """
 
 import digitalio
@@ -153,12 +163,12 @@ class NeoPixel(_PixelBuf):
         Inicializuje fake NeoPixel.
 
         Parametry:
-            pin         – libovolný objekt reprezentující pin (např. board.P0)
+            pin         – pin LED (CircuitPython: board.GP0, micro:bit: pin16)
             n           – počet LED
             bpp         – bytes per pixel (3 = RGB, 4 = RGBW)
-            brightness  – symbolická hodnota (neaplikuje se)
-            auto_write  – pokud True, změny se ihned projeví
-            pixel_order – pořadí barev (RGB/GRB/RGBW/GRBW)
+            brightness  – jas 0.0-1.0 (jen CircuitPython; zde symbolicky)
+            auto_write  – pokud True, změny se ihned projeví (jen CircuitPython)
+            pixel_order – pořadí barev (RGB/GRB/RGBW/GRBW) (jen CircuitPython)
         """
         if pixel_order is None:
             pixel_order = GRB if bpp == 3 else GRBW
@@ -212,6 +222,15 @@ class NeoPixel(_PixelBuf):
 
         CircuitPython používá write() jako starší API.
         """
+        self.show()
+
+    def clear(self):
+        """
+        Zhasne všechny LED hned (bez show()).
+
+        Jen MicroPython na BBC micro:bitu - v CircuitPythonu použijte fill((0, 0, 0)).
+        """
+        self.fill((0, 0, 0))
         self.show()
 
     def _transmit(self, buffer):
