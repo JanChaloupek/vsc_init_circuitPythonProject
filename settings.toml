@@ -1,0 +1,29 @@
+# ------------------------------------------------------------
+# settings.toml - nastaveni pro CircuitPython (na MicroPython se nenahrava)
+#
+# Soubor je na disku CIRCUITPY vedle code.py. V kurzu ho zatim nepouzivame -
+# vsechny radky jsou komentare, takze nic nenastavuje.
+#
+# 1) Vlastni hodnoty pro program (nemusi byt natvrdo v code.py):
+#
+#      RYCHLOST = 60
+#      ROBOT_JMENO = "Bleskovy"
+#
+#    V programu:   import os
+#                  rychlost = os.getenv("RYCHLOST")     # 60, kdyz chybi: None
+#
+# 2) Nastaveni samotneho CircuitPythonu (klice CIRCUITPY_...), napr.:
+#
+#      CIRCUITPY_WIFI_SSID = "nazev site"         deska s Wi-Fi se po startu pripoji
+#      CIRCUITPY_WIFI_PASSWORD = "heslo"          (napr. Raspberry Pi Pico 2 W)
+#      CIRCUITPY_WEB_API_PASSWORD = "heslo"       soubory a konzole pres prohlizec
+#      CIRCUITPY_BLE_NAME = "robot1"              jmeno desky pro Bluetooth
+#
+#    Projevi se az pri startu desky: po zmene .\cpy reset --hard
+#
+# Omezeni: jen retezce v uvozovkach a cela cisla. Sekce [..], desetinna
+# cisla a true / false CircuitPython necte.
+#
+# POZOR: projekt je v gitu a repozitar muze byt verejny - hesla sem
+# nepiste, dokud soubor neni v .gitignore.
+# ------------------------------------------------------------

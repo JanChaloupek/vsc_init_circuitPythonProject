@@ -47,6 +47,7 @@ Simulace i testy používají **stejný falešný hardware** – co ukazuje simu
 |---|---|
 | **`code.py`** | výchozí program pro **CircuitPython** (blikání LED, nápis na displeji) |
 | **`main.py`** | výchozí program pro **MicroPython** |
+| **`settings.toml`** | nastavení pro **CircuitPython** (vlastní hodnoty pro program přes `os.getenv()`, Wi-Fi, …); v kurzu zatím nepoužíváme – obsahuje jen komentáře s vysvětlením |
 | **`docs/`** | podrobné návody: `CircuitPython.md`, `MicroPython.md`, `MicroBit.md`, `Nastroje.md` (na desku se nenahrávají) |
 | **`lib/`** | společné knihovny pro CircuitPython i MicroPython (na desce ve složce `/lib`) – popis všech tří složek je v [lib/README.md](lib/README.md) |
 | **`lib_cpy/`** | knihovny jen pro CircuitPython (na desce také `/lib`) |
