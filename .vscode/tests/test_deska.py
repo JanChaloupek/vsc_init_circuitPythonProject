@@ -336,6 +336,31 @@ def offline_tests(proj):
     rc, out = run(proj, "mpy", "minify", "include", "lib/spolecny.py")
     R.check("minify include lib/spolecny.py", rc == 0 and "lib/spolecny.py" not in settings.read_text(encoding="utf-8"), out)
     settings.unlink(missing_ok=True)
+    # uroven max: moduly, ktere main.py nepouziva, se nenahravaji
+    (proj / "nepouzity.py").write_text("X = 1\n", encoding="utf-8")
+    try:
+        run(proj, "mpy", "minify", "max")
+        for profile in ("microbit", "pico"):
+            rc, out = run(proj, "mpy", "files", profile)
+            got = files_listing(out)
+            R.check(f"mpy files {profile} s max: nepouzity.py vynechan, pouzivane moduly a knihovny zustanou",
+                    rc == 0 and got == EXPECTED[profile] and "nepouzity.py  - uroven max: main.py ho nepouziva" in out,
+                    f"{got}\n{out}")
+        run(proj, "mpy", "minify", "full")
+        rc, out = run(proj, "mpy", "files", "microbit")
+        R.check("mpy files s full: nepouzity.py se nahraje", rc == 0 and "nepouzity.py" in files_listing(out), out)
+    finally:
+        settings.unlink(missing_ok=True)
+        (proj / "nepouzity.py").unlink()
+    (proj / "boot.py").write_text("# boot\n", encoding="utf-8")
+    try:
+        rc, out = run(proj, "mpy", "files", "microbit")
+        R.check("boot.py na micro:bit ne (MicroPython na micro:bitu ho nespousti)",
+                "boot.py" not in files_listing(out) and 'boot.py  - disable "/boot.py" v [micropython.microbit]' in out, out)
+        rc, out = run(proj, "mpy", "files", "pico")
+        R.check("boot.py na Pico ano", "boot.py" in files_listing(out), out)
+    finally:
+        (proj / "boot.py").unlink()
 
     R.start("Bez desky: select, vscode, sim, test, lib, flash")
     for tool in ("cpy", "mpy"):

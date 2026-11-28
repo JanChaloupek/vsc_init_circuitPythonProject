@@ -1549,6 +1549,65 @@ def mp_merge_program(main_file, files):
     return "\n".join(out) + "\n", merged
 
 
+def py_imports(path):
+    """Jmena modulu (prvni cast jmena), ktere soubor importuje - kdekoliv
+    v kodu, i ve funkci nebo v try. None = soubor nejde precist."""
+    import ast
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except (SyntaxError, ValueError, OSError):
+        return None
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module.split(".")[0])
+    return names
+
+
+MAX_UNUSED_WHY = "uroven max: main.py ho nepouziva"
+
+
+def mp_max_unused(files, entry=MP_ENTRY):
+    """Uroven max: ktere moduly program entry nepouziva - ani primo, ani pres
+    jiny modul. Takove se na desku nenahravaji (MicroPython spousti jen
+    main.py, setri se misto). Modul = soubor .py v koreni desky nebo primo
+    v /lib (jako u slucovani). Zustavaji: balicky ve slozkach, data (.txt,
+    .csv - jestli je program cte, z kodu poznat nejde), boot.py, code.py
+    a soubory vyrazene ze zmenseni (minify exclude). Import se pocita
+    kdekoliv v kodu (i ve funkci). Kdyz nejaky pouzivany soubor nejde
+    precist, nic se nevynecha. Vraci seznam souboru projektu."""
+    if entry not in files:
+        return []
+    cands = {}
+    for rel in files:
+        dst = board_path(rel)
+        stem = Path(dst).stem
+        if rel == entry or not rel.lower().endswith(".py") or stem in ("boot", "code", "main"):
+            continue
+        if dst.count("/") == 0 or (dst.count("/") == 1 and dst.startswith(BOARD_LIB + "/")):
+            cands.setdefault(stem, []).append(rel)
+    used, todo = set(), [entry]
+    while todo:
+        names = py_imports(PROJECT / todo.pop())
+        if names is None:
+            return []
+        for n in names & set(cands) - used:
+            used.add(n)
+            todo.extend(cands[n])
+    return sorted(rel for stem, rels in cands.items() if stem not in used for rel in rels
+                  if not minify_excluded(PROJECT / rel))
+
+
+def mp_max_files(files):
+    """Pri urovni max vynecha nepouzite moduly (mp_max_unused). Vraci (soubory, vynechane)."""
+    if minify_enabled("mpy") != "max":
+        return files, []
+    unused = mp_max_unused(files)
+    return [r for r in files if r not in unused], unused
+
+
 def same_content(src, dst):
     """Ma soubor na desce stejny obsah jako v projektu?"""
     try:
@@ -3239,6 +3298,11 @@ def mpremote_cmd(port, *args):
 # tam muze byt SyntaxError opravdova chyba v programu.
 MP_RETRY_CMDS = {"exec", "cp", "fs", "ls", "rm"}
 MP_RETRIES = 2
+# Nahravani na micro:bit: soubor jde po kouscich 256 B a poskozeny muze dorazit
+# kterykoliv z nich - u velkeho souboru je chyba castejsi (2026-11-28: 17 kB soubor
+# selhal 2x za sebou, prosel az 3. pokus). Opakuje se jen soubor, ktery selhal
+# (nezmenene soubory mpremote preskoci), proto si muzeme dovolit vic pokusu.
+MP_RETRIES_FLAT = 5
 
 
 def mpremote(port, *args, capture=False, timeout=None):
@@ -3460,12 +3524,13 @@ def mp_stage(files):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def mp_run_cp(port, args, root, on_row, on_retry=None):
+def mp_run_cp(port, args, root, on_row, on_retry=None, retries=MP_RETRIES):
     """Spusti mpremote s prikazy cp a vystup posila po radcich do on_row.
-    Chybu, kterou ma smysl opakovat (viz mp_failure), zopakuje - nezmenene
-    soubory se napodruhe preskoci. Pred opakovanim zavola on_retry(pokus,
-    chyba). Vraci (navratovy kod, posledni radky, chyba nebo None)."""
-    for attempt in range(MP_RETRIES + 1):
+    Chybu, kterou ma smysl opakovat (viz mp_failure), zopakuje (nejvys
+    retries krat) - nezmenene soubory se napodruhe preskoci. Pred opakovanim
+    zavola on_retry(pokus, chyba). Vraci (navratovy kod, posledni radky,
+    chyba nebo None)."""
+    for attempt in range(retries + 1):
         rows = []
         proc = subprocess.Popen(mpremote_cmd(port, *args), cwd=str(root), stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
@@ -3478,7 +3543,7 @@ def mp_run_cp(port, args, root, on_row, on_retry=None):
         if rc == 0:
             return rc, rows[-4:], None
         fail = mp_failure("\n".join(rows))
-        if not fail["retry"] or attempt == MP_RETRIES:
+        if not fail["retry"] or attempt == retries:
             return rc, rows[-4:], fail
         if on_retry:
             on_retry(attempt + 1, fail)
@@ -3561,6 +3626,9 @@ def mp_copy(port, files):
     profile = mp_profile(port)
     flat = profile == "microbit"
     say(f"Pravidla: {rules_rel()} - {rule_sections_text(profile)}", "info")
+    files, unused = mp_max_files(files)
+    if unused:
+        warn("Nenahraje se " + ", ".join(unused) + f" - {MP_ENTRY} je nepouziva (mpy minify max).")
     for rel in files:
         if has_bom(PROJECT / rel):
             warn(f"{rel} je ulozeny jako 'UTF-8 with BOM' - na desku pujde bez BOM ({BOM_HELP}).")
@@ -3578,8 +3646,10 @@ def mp_copy(port, files):
         say(f"Nahravam {len(staged)} souboru" + (" (micro:bit: vse do korene desky)" if flat else ""), "info")
         args = mp_cp_plan(staged, flat)
         line()
+        retries = MP_RETRIES_FLAT if flat else MP_RETRIES
         rc, last, fail = mp_run_cp(port, args, root, print,
-                                   lambda n, f: warn(f"Pokus {n} selhal: {f['text']} - opakuji ({n}/{MP_RETRIES})"))
+                                   lambda n, f: warn(f"Pokus {n} selhal: {f['text']} - opakuji ({n}/{retries})"),
+                                   retries)
     if rc != 0:
         raise CpyError(f"Nahravani selhalo: {fail['text']}." + "".join("\n       - " + t for t in fail["tips"]))
 
@@ -3610,6 +3680,11 @@ def mp_upload_files(opts, title, only=None):
                     + (" microbit" if flat else "") + ")")
         if (PROJECT / MP_ENTRY).is_file() and MP_ENTRY not in files:
             st.info("pozor:", f"{MP_ENTRY} pravidla vylucuji - nenahraje se", "warn")
+    if not only:
+        files, unused = mp_max_files(files)
+        if unused:
+            st.info("nenahraje se:", ", ".join(unused) + f" - {MP_ENTRY} je nepouziva (uroven max)", "warn")
+            st.info("", "jiny program pres .\\mpy runmain je potrebuje na desce - pak pouzij .\\mpy minify full")
     paths = [PROJECT / r for r in files]
     git_conflict_step(st, paths)
     minify_report(st, "mpy", paths)
@@ -3649,17 +3724,22 @@ def mp_upload_files(opts, title, only=None):
         else:
             say("   | " + row)
 
+    retries = MP_RETRIES_FLAT if flat else MP_RETRIES
+
     def on_retry(n, fail):
         counts["up"] = 0                        # pocita se jen posledni pokus
         st.info("chyba:", f"pokus {n}: {fail['text']}", "warn")
         if fail["detail"]:
             st.info("", fail["detail"], "warn")
-        st.info("opakuji:", f"pokus {n + 1} z {MP_RETRIES + 1} (nezmenene soubory se preskoci)", "warn")
+        st.info("opakuji:", f"pokus {n + 1} z {retries + 1} (nezmenene soubory se preskoci)", "warn")
 
     with mp_stage(files) as (root, staged, n_min, before, after, merged):
         if merged:
             st.info("slouceni:", f"do {MP_ENTRY}: " + ", ".join(m.name for m in merged)
                     + " - na desku jde jen sloucene main.py (chyby ukazi zmenena jmena a radky)", "warn")
+        elif minify_enabled("mpy") == "max" and MP_ENTRY in files:
+            st.info("slouceni:", f"{MP_ENTRY} neimportuje zadny mistni modul (from modul import ...) - "
+                    "neni co sloucit; ostatni .py jdou zvlast, zmensene jako full", "warn")
         if n_min:
             st.info("zmenseno:", f"{n_min} souboru {fmt_size(before)} -> {fmt_size(after)} "
                     f"(usetreno {fmt_size(before - after)})")
@@ -3671,7 +3751,7 @@ def mp_upload_files(opts, title, only=None):
                 st.fail("projekt se na micro:bit nevejde.", *MP_NOSPACE_TIPS)
         args = mp_cp_plan(staged, flat)
         st.info("prikaz:", "mpremote connect " + port + " " + " ".join(args))
-        rc, last, fail = mp_run_cp(port, args, root, on_row, on_retry)
+        rc, last, fail = mp_run_cp(port, args, root, on_row, on_retry, retries)
     if rc != 0:
         st.fail(f"{fail['text']} (mpremote, kod {rc}).", *last, *fail["tips"])
     copied = max(0, len(staged) - counts["up"])
@@ -3699,6 +3779,13 @@ def mp_runmain(opts):
     if not src.is_file():
         raise CpyError(f"Soubor '{rel}' nenalezen.")
     port = mp_ready_port(opts)
+    if minify_enabled("mpy") == "max" and src.name != MP_ENTRY:
+        unused = {Path(board_path(r)).stem: r for r in mp_max_unused(project_files(mp_profile(port)))}
+        need = sorted(unused[n] for n in (py_imports(src) or set()) & set(unused))
+        if need:
+            warn(f"{src.name} importuje " + ", ".join(need) + f" - pri urovni max se na desku nenahravaji "
+                 f"(nepouziva je {MP_ENTRY}), program asi skonci chybou ImportError. "
+                 "Pro tento zpusob prace: .\\mpy minify full a .\\mpy upload")
     say(f"Spoustim {src.name} z RAM (bez zapisu na desku). Preruseni: Ctrl+C", "info")
     line()
     run_file = src
@@ -4130,7 +4217,7 @@ def minify_split(tool, files):
         except ValueError:
             rel = f.name
         if level == "max" and f.name == MP_ENTRY and f.parent.resolve() == PROJECT.resolve():
-            yes.append(rel + " (sloucene s moduly)")
+            yes.append(rel + " (sloucene s mistnimi moduly, ktere importuje)")
         elif f.name in NO_MINIFY:
             no.append((rel, "vychozi - ladis ho"))
         elif minify_excluded(f):
@@ -4232,11 +4319,14 @@ def minify_cmd(tool, opts):
     main = PROJECT / MP_ENTRY
     if tool == "mpy" and main in files:
         try:
-            merged_src, merged = mp_merge_program(main, files)
+            unused = {PROJECT / r for r in mp_max_unused(project_files(profile))}
+            used = [f for f in files if f not in unused]
+            merged_src, merged = mp_merge_program(main, used)
             gone = {m.resolve() for m in merged} | {main.resolve()}
             total = len(minify_source(merged_src.encode("utf-8"), MP_ENTRY, "max")) + sum(
-                size(f, "full") for f in files if f.resolve() not in gone)
-            rows.append(("max", total, f" (slouci {len(merged)} modulu)"))
+                size(f, "full") for f in used if f.resolve() not in gone)
+            rows.append(("max", total, f" (slouci {len(merged)} modulu"
+                         + (f", {len(unused)} nepouzitych nenahraje" if unused else "") + ")"))
         except CpyError as e:
             rows.append(("max", None, " - nejde: " + str(e).splitlines()[0].replace("Slouceni: ", "")))
     say(f"   na desku jde {len(files)} .py souboru, {fmt_size(before)}:")
@@ -4275,6 +4365,9 @@ def files_cmd(tool, opts):
     else:
         profile = mp_guess_profile(opts)
     files, skipped = project_walk(profile)
+    if tool == "mpy":
+        files, unused = mp_max_files(files)
+        skipped += [(r, MAX_UNUSED_WHY) for r in unused]
     layout, problems = board_layout(files, profile)
     say(f"Pravidla: {rules_rel()} - {rule_sections_text(profile)}  ({PROFILE_NAMES[profile]})", "info")
     if tool == "mpy" and not opts.args:

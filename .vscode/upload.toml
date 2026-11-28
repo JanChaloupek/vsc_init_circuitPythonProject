@@ -48,4 +48,6 @@ enable = ["lib/", "lib_mpy/"]
 
 [micropython.microbit]
 # micro:bit nema slozky - knihovny ze slozek se nenahravaji,
-# moduly pro micro:bit patri do korene projektu
+# moduly pro micro:bit patri do korene projektu.
+# boot.py MicroPython na micro:bitu nespousti (overeno 2026-11-28, MicroPython 1.15)
+disable = ["/boot.py"]

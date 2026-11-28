@@ -149,6 +149,7 @@ Totéž (kromě `max`) umí `cpy minify`, ale u CircuitPythonu (disk 1 MB) to ob
 - Bloky `if __name__ == "__main__":` v importovaných modulech (jejich vlastní testy) se vynechají, jinak by se po sloučení spustily.
 - Modul vyřazený přes `minify exclude` se nesloučí: zůstane jako samostatný soubor se svými jmény a program ho normálně importuje.
 - Balíčky ve složkách (např. `lib_mpy/picoed_v2_lib/` na Picu) se neslučují a zůstanou jako cizí knihovny.
+- **Moduly, které `main.py` nepoužívá** (ani přímo, ani přes jiný modul), se při `max` na desku **vůbec nenahrají** – MicroPython spouští jen `main.py` a místo je drahé. Výpis to řekne řádkem `nenahraje se:`, přehled ukáže `.\mpy files`. Datové soubory (`.txt`, `.csv`) se nahrají vždy. Pozor: jiný program spuštěný přes `.\mpy runmain soubor.py` své moduly hledá na desce – pak použijte `mpy minify full` (`runmain` na to upozorní).
 - Sloučení **odmítne** (s vysvětlením a radou použít `full`) program, ve kterém je `import modul` (použití `modul.neco`), `from modul import *`, import místního modulu uvnitř funkce nebo podmínky, relativní import, kruhový import, nebo stejné jméno definované ve dvou modulech. Co by `max` udělal, ukáže předem `mpy minify`.
 - Vyzkoušeno: zkušební program se dvěma moduly se po sloučení spustil správně na micro:bitu i na Picu. Sloučený `cely_projekt` + program (9 437 B) se na micro:bitu přeloží a naimportuje (RAM 9 104 B).
 
